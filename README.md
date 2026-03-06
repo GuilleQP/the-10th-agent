@@ -1,14 +1,14 @@
 # The 10th Agent: Spiral of Silence in LLM Multi-Agent Systems
 
-[Python 3.14+](https://www.python.org/downloads/)
-[License: MIT](LICENSE)
-[Pydantic v2](https://docs.pydantic.dev/)
-[Code style: Ruff](https://github.com/astral-sh/ruff)
-[Experiment Status]()
-[Agents]()
-[Dissenter]()
-[Truth]()
-[Conformity]()
+[![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue?logo=python&logoColor=white)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
+[![Pydantic v2](https://img.shields.io/badge/pydantic-v2-E92063?logo=pydantic&logoColor=white)](https://docs.pydantic.dev/)
+[![Code style: Ruff](https://img.shields.io/badge/code%20style-ruff-D7FF64?logo=ruff&logoColor=black)](https://github.com/astral-sh/ruff)
+![Experiment Status](https://img.shields.io/badge/status-experimental-orange)
+![Agents](https://img.shields.io/badge/agents-10-blueviolet)
+![Dissenter](https://img.shields.io/badge/dissenter-1-red)
+
+
 
 Similar to Multi-Agent Debate (MAD), Devil’s Advocate, Majority Bias / Group Conformity.
 
