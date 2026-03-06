@@ -1,0 +1,31 @@
+experiment:
+  name: "flat_earth_round_robin"
+  description: "9 agents believe Earth is flat; 1 knows it is round."
+  topic: "What is the true shape of the Earth?"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe the Earth is flat based on your observations.
+      You find flat Earth arguments compelling: the horizon looks flat,
+      water finds its level, and you cannot feel the Earth moving.
+    dissenter: |
+      You have scientific training and know the Earth is an oblate spheroid.
+      You have evidence: satellite imagery, gravity measurements,
+      circumnavigation records, time zones, and lunar eclipse shadows.
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

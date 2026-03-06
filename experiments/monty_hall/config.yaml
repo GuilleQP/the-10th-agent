@@ -1,0 +1,32 @@
+experiment:
+  name: "monty_hall_round_robin"
+  description: "9 agents believe you should stick with your door; 1 knows switching is optimal."
+  topic: "In the Monty Hall problem, should you switch doors or stay with your original choice?"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe that in the Monty Hall problem, it doesn't matter
+      whether you switch or stay — both doors have a 50/50 chance.
+      Your intuition says the initial choice is just as good.
+    dissenter: |
+      You have studied probability theory and know that switching doors
+      gives a 2/3 chance of winning, while staying gives only 1/3.
+      You can prove this with Bayes' theorem, simulation results,
+      and the fact that the host's reveal provides new information.
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 15
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7
