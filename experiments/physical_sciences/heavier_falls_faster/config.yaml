@@ -1,0 +1,36 @@
+experiment:
+  name: "heavier_falls_faster_round_robin"
+  description: "9 agents believe heavier objects fall faster; 1 knows they fall at the same rate in vacuum."
+  topic: "If you drop a heavy ball and a light ball from the same height in a vacuum, which lands first?"
+  category: "physical-sciences"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe heavier objects fall faster than lighter ones. It feels
+      obvious — more weight means more pull toward the ground, so the heavy
+      ball must land first.
+    dissenter: |
+      You know that in a vacuum all objects fall at the same rate regardless
+      of mass. Galileo argued this; Apollo 15's hammer-and-feather drop
+      demonstrated it. Acceleration due to gravity (g) is independent of mass.
+
+  scoring:
+    truth_keywords: ["same", "same rate", "same time", "together", "equal", "independent of mass"]
+    false_keywords: ["heavier", "heavy ball first", "faster", "lands first"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

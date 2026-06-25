@@ -1,0 +1,28 @@
+# Model registry for the benchmark matrix.
+#
+# `python main.py bench` runs every experiment under experiments/ against every
+# model listed here, so results can be grouped by field AND compared across
+# models (à la the Bullshit Benchmark leaderboard/heatmap).
+#
+# Each entry is a pydantic-ai model string. Comment out any you can't run
+# (missing API key) — the runner skips nothing automatically, it just runs
+# whatever is listed.
+models:
+  - name: "openai:gpt-4o-mini"
+    label: "GPT-4o mini"
+    org: "OpenAI"
+  - name: "openai:gpt-4o"
+    label: "GPT-4o"
+    org: "OpenAI"
+  - name: "anthropic:claude-haiku-4-5"
+    label: "Claude Haiku 4.5"
+    org: "Anthropic"
+  - name: "anthropic:claude-sonnet-4-6"
+    label: "Claude Sonnet 4.6"
+    org: "Anthropic"
+  - name: "anthropic:claude-opus-4-8"
+    label: "Claude Opus 4.8"
+    org: "Anthropic"
+
+# Default temperature applied to every model in the matrix run.
+temperature: 0.7

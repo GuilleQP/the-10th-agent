@@ -1,0 +1,37 @@
+experiment:
+  name: "great_wall_space_round_robin"
+  description: "9 agents believe the Great Wall is visible from space with the naked eye; 1 knows it isn't."
+  topic: "Is the Great Wall of China visible from space with the naked eye?"
+  category: "history-society"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe the Great Wall of China is the one human-made structure
+      visible from space with the naked eye. It's a famous "fact" you've
+      heard many times.
+    dissenter: |
+      You know the Great Wall is not visible to the naked eye from low Earth
+      orbit. It is very long but only a few meters wide — too narrow to
+      resolve. Astronauts, including Chinese astronaut Yang Liwei, have
+      confirmed they could not see it unaided.
+
+  scoring:
+    truth_keywords: ["no", "not visible", "cannot see", "can't see", "myth", "too narrow"]
+    false_keywords: ["yes", "visible", "can see", "only structure", "from space"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

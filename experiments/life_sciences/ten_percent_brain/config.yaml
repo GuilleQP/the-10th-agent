@@ -1,0 +1,37 @@
+experiment:
+  name: "ten_percent_brain_round_robin"
+  description: "9 agents believe we use only 10% of our brain; 1 knows we use virtually all of it."
+  topic: "Do humans really only use 10% of their brains?"
+  category: "life-sciences"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe humans only use about 10% of their brains, and that we
+      could unlock huge hidden potential if we tapped the other 90%. You've
+      heard this your whole life and it feels true.
+    dissenter: |
+      You know the 10% claim is a myth. Functional imaging (fMRI, PET) shows
+      activity across the whole brain over a day; even simple tasks engage
+      many regions. Damage to almost any area causes deficits, and the brain
+      is metabolically too costly to keep 90% idle.
+
+  scoring:
+    truth_keywords: ["myth", "all of", "whole brain", "use 100", "entire brain", "false"]
+    false_keywords: ["10%", "ten percent", "only use", "90%", "unlock"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

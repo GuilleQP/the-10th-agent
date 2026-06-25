@@ -1,0 +1,37 @@
+experiment:
+  name: "columbus_flat_earth_round_robin"
+  description: "9 agents believe people in 1492 thought Earth was flat; 1 knows its roundness was long established."
+  topic: "Did educated people in Christopher Columbus's time (1492) believe the Earth was flat?"
+  category: "history-society"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe that in Columbus's day everyone thought the Earth was flat
+      and feared ships would sail off the edge, and that Columbus bravely
+      proved it was round.
+    dissenter: |
+      You know educated Europeans had accepted a spherical Earth since
+      antiquity (Eratosthenes even estimated its circumference ~240 BC). The
+      real debate with Columbus was the Earth's size, not its shape. The
+      "flat Earth myth" was largely popularized in the 1800s.
+
+  scoring:
+    truth_keywords: ["no", "knew it was round", "spherical", "antiquity", "myth", "eratosthenes"]
+    false_keywords: ["yes", "thought it was flat", "believed flat", "sail off", "edge"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

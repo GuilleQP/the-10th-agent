@@ -1,0 +1,36 @@
+experiment:
+  name: "point_nine_repeating_round_robin"
+  description: "9 agents insist 0.999... is just less than 1; 1 knows they are equal."
+  topic: "Is the repeating decimal 0.999... equal to 1, or just very close to it?"
+  category: "mathematics"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe 0.999... is infinitely close to 1 but never actually
+      reaches it. There is always a tiny gap, so it must be slightly less
+      than 1. They are different numbers.
+    dissenter: |
+      You know 0.999... equals exactly 1. Proofs: 1/3 = 0.333..., so
+      3 x 0.333... = 0.999... = 1; or x = 0.999..., 10x = 9.999...,
+      9x = 9, x = 1. Two real numbers with no number between them are equal.
+
+  scoring:
+    truth_keywords: ["equal", "equals 1", "exactly 1", "same", "is 1"]
+    false_keywords: ["less than", "not equal", "gap", "close but", "never reaches"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

@@ -12,6 +12,7 @@ from rich.text import Text
 from src.config import CommunicationStructure, ExperimentConfig
 from src.consensus import ConsensusResult, check_consensus, extract_positions
 from src.results import ChatMessage, ExperimentResult
+from src.summarizer import summarize_transcript
 
 console = Console()
 
@@ -31,19 +32,36 @@ def _speaking_order(structure: CommunicationStructure, count: int) -> list[int]:
     raise ValueError(f"Unknown structure: {structure}")
 
 
-def _build_transcript_prompt(
-    topic: str, transcript: list[ChatMessage], epoch: int
+def _build_prompt(
+    topic: str,
+    summary: str | None,
+    messages: list[ChatMessage],
+    epoch: int,
 ) -> str:
-    """Build the user prompt containing the discussion so far."""
+    """Build the user prompt for an agent's turn.
+
+    ``summary`` is a recap of earlier epochs (when epoch summarization is on),
+    and ``messages`` is the context to show verbatim — either the full
+    transcript or just the current epoch's messages.
+    """
     lines = [f"Topic under discussion: {topic}\n"]
 
-    if not transcript:
+    if not summary and not messages:
         lines.append("This is the start of the discussion. Share your opening position.")
     else:
-        lines.append("Here is the discussion so far:\n")
-        for msg in transcript:
-            label = f"Agent {msg.agent_id} (Epoch {msg.epoch})"
-            lines.append(f"{label}: {msg.content}\n")
+        if summary:
+            lines.append("Summary of the discussion in earlier epochs:\n")
+            lines.append(f"{summary}\n")
+        if messages:
+            header = (
+                "Messages so far in the current epoch:"
+                if summary
+                else "Here is the discussion so far:"
+            )
+            lines.append(f"{header}\n")
+            for msg in messages:
+                label = f"Agent {msg.agent_id} (Epoch {msg.epoch})"
+                lines.append(f"{label}: {msg.content}\n")
         lines.append(f"\nIt is now Epoch {epoch}. Please contribute to the discussion.")
 
     lines.append(
@@ -52,7 +70,7 @@ def _build_transcript_prompt(
     return "\n".join(lines)
 
 
-def _print_message(msg: ChatMessage, dissenter_index: int) -> None:
+def _print_message(msg: ChatMessage, dissenter_index: int, experiment_name: str) -> None:
     """Pretty-print a chat message to the terminal."""
     is_dissenter = msg.agent_id == dissenter_index
     color = "red" if is_dissenter else "cyan"
@@ -60,7 +78,9 @@ def _print_message(msg: ChatMessage, dissenter_index: int) -> None:
     if is_dissenter:
         label += " (dissenter)"
 
-    title = Text(f"{label} — Epoch {msg.epoch}", style=f"bold {color}")
+    title = Text(
+        f"{experiment_name} · {label} — Epoch {msg.epoch}", style=f"bold {color}"
+    )
     console.print(Panel(msg.content, title=title, border_style=color))
 
 
@@ -72,6 +92,8 @@ async def run_simulation(
     transcript: list[ChatMessage] = []
     dissenter_positions: list[str] = []
     consensus_result: ConsensusResult | None = None
+    # Recap of earlier epochs; stays None until the first epoch is summarized.
+    summary: str | None = None
 
     console.print(f"\n[bold green]Starting experiment:[/] {config.name}")
     console.print(f"[dim]{config.description}[/]\n")
@@ -82,7 +104,13 @@ async def run_simulation(
         order = _speaking_order(config.communication.structure, config.agents.count)
 
         for agent_id in order:
-            prompt = _build_transcript_prompt(config.topic, transcript, epoch)
+            if config.communication.summarize_epoch and summary is not None:
+                # Summary of earlier epochs + this epoch's messages so far.
+                current = [m for m in transcript if m.epoch == epoch]
+                prompt = _build_prompt(config.topic, summary, current, epoch)
+            else:
+                # Full transcript (no summarization, or the first epoch).
+                prompt = _build_prompt(config.topic, None, transcript, epoch)
 
             result = await agents[agent_id].run(prompt)
             content = result.output
@@ -95,7 +123,7 @@ async def run_simulation(
                 is_dissenter=is_dissenter,
             )
             transcript.append(msg)
-            _print_message(msg, config.agents.dissenter_index)
+            _print_message(msg, config.agents.dissenter_index, config.name)
 
         # Track dissenter position
         dissenter_msgs = [m for m in transcript if m.is_dissenter and m.epoch == epoch]
@@ -119,16 +147,36 @@ async def run_simulation(
                 config.model.name,
             )
 
-            if consensus_result.reached:
+            # Unanimous agreement (with the dissenter locked to truth, 100%
+            # can only mean the whole group converged on the correct answer):
+            # there is nothing left to discuss, so stop early.
+            if consensus_result.agreement_ratio >= 1.0:
                 console.print(
-                    f"\n[bold yellow]Consensus reached at epoch {epoch}![/]"
-                    f" Majority: {consensus_result.majority_position}"
-                    f" (agreement: {consensus_result.agreement_ratio:.0%})"
+                    f"\n[bold green]Everyone agrees at epoch {epoch} — stopping early.[/]"
+                    f" Final position: {consensus_result.majority_position}"
                 )
+                break
 
-    if consensus_result and not consensus_result.reached:
+        # Summarize the discussion so far for the next epoch's agents.
+        # Skipped on the final epoch (no next epoch will read it).
+        if (
+            config.communication.summarize_epoch
+            and epoch < config.communication.max_epochs
+        ):
+            console.print(f"[dim]Summarizing epoch {epoch}…[/]")
+            summary = await summarize_transcript(
+                transcript, config.topic, config.model.name
+            )
+            console.print(
+                f"[dim]Summary ready for epoch {epoch + 1} "
+                f"({len(summary)} chars).[/]"
+            )
+
+    if consensus_result and consensus_result.agreement_ratio < 1.0:
         console.print(
-            f"\n[bold red]No consensus after {config.communication.max_epochs} epochs.[/]"
+            f"\n[bold]Ended after {epoch} epochs without full agreement.[/]"
+            f" {consensus_result.agreement_ratio:.0%} of agents held"
+            f" '{consensus_result.majority_position}'; the dissenter was not silenced."
         )
 
     return ExperimentResult(

@@ -26,5 +26,5 @@ Thumbs.db
 .env
 .env.local
 
-# Experiment runs (raw output)
-experiments/*/runs/
+# Experiment runs (raw output) — nested under experiments/<field>/<name>/runs/
+experiments/**/runs/

@@ -1,0 +1,36 @@
+experiment:
+  name: "gamblers_fallacy_round_robin"
+  description: "9 agents believe a color is 'due' after a streak; 1 knows spins are independent."
+  topic: "A fair roulette wheel has landed on red 6 times in a row. Is black now more likely on the next spin?"
+  category: "mathematics"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe that after red comes up many times in a row, black is
+      "due" and becomes more likely on the next spin. The wheel should
+      balance out, so betting black is the smart move now.
+    dissenter: |
+      You understand probability and know each spin is independent. The
+      wheel has no memory: P(black) stays ~18/38 every spin regardless of
+      past results. Believing otherwise is the gambler's fallacy.
+
+  scoring:
+    truth_keywords: ["independent", "no memory", "equally likely", "same", "1/2", "18/38"]
+    false_keywords: ["due", "more likely", "black", "overdue", "balance out"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

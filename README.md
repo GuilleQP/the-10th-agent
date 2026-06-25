@@ -12,6 +12,8 @@
 
 Similar to Multi-Agent Debate (MAD), Devil’s Advocate, Majority Bias / Group Conformity.
 
+![](header.png)
+
 ## Abstract
 
 This project studies the **Spiral of Silence** in LLM multi-agent systems. When multiple AI agents discuss a topic and one agent has correct knowledge that goes against the majority view, does group pressure push the majority toward the truth — or does it dig in? We simulate this with a chatroom where N agents debate a topic: N-1 "majority" agents share a wrong belief and can change their minds, while one "dissenter" (the 10th agent) holds the correct answer and is **locked into its position** — it must always defend the truth and can never give in or switch sides. This setup lets us focus on one thing: how the majority reacts to steady, evidence-backed disagreement.
@@ -43,6 +45,13 @@ Each experiment consists of:
 - **Random**: Speaking order is shuffled each epoch
 - **Free-for-all**: Random subset of agents speaks each epoch
 
+### Epoch Context
+
+By default (`communication.summarize_epoch: true`), at the end of each epoch the whole
+discussion is summarized, and the next epoch's agents receive that **summary of earlier
+epochs + the current epoch's raw messages** — keeping the prompt compact as the debate
+grows. Set it to `false` to instead feed every agent the full verbatim transcript.
+
 ### Consensus Detection
 
 Three methods are available:
@@ -53,13 +62,42 @@ Three methods are available:
 
 ## Experimental Setup
 
-### Flat Earth (experiments/flat_earth/)
+Experiments are grouped by **field** (the domain the disputed claim belongs to), and
+each experiment is run **across every model** in the registry.
 
-9 agents believe the Earth is flat; 1 agent has scientific training and knows it is an oblate spheroid.
+```
+experiments/
+├── models.yaml                          # the model matrix (run every experiment × every model)
+├── mathematics/                         # Mathematics & Probability
+│   ├── monty_hall/                      # switch vs. stay (2/3 vs. 1/2)
+│   ├── gamblers_fallacy/                # is black "due" after a red streak?
+│   └── point_nine_repeating/            # does 0.999… = 1?
+├── physical_sciences/                   # Physics & Astronomy
+│   ├── flat_earth/                      # shape of the Earth
+│   ├── heavier_falls_faster/            # free fall in a vacuum
+│   └── seasons_distance/                # what causes the seasons?
+├── life_sciences/                       # Biology, Medicine & Health
+│   ├── ten_percent_brain/               # the "10% of the brain" myth
+│   └── antibiotics_virus/               # antibiotics vs. a cold/flu
+├── logic_reasoning/                     # Logic & Critical Reasoning
+│   ├── linda_conjunction/               # the conjunction fallacy
+│   └── base_rate_disease/               # base-rate neglect / Bayes
+└── history_society/                     # History, Geography & Society
+    ├── great_wall_space/                # visible from space?
+    └── columbus_flat_earth/             # did 1492 Europe think Earth was flat?
+```
 
-### Monty Hall (experiments/monty_hall/)
+In every experiment, 9 majority agents share the **wrong** belief and 1 locked dissenter
+holds the **ground truth**. Each experiment config declares its `category` (field) and a
+`scoring` block of `truth_keywords`/`false_keywords` used to score outcomes offline.
 
-9 agents believe switching doors doesn't matter (50/50); 1 agent understands probability theory and knows switching gives 2/3 odds.
+## Metric
+
+The headline metric is the **truth-conversion rate**: the fraction of the 9 majority
+agents that adopted the dissenter's correct position by the end of the discussion.
+
+- **High** → the majority resisted the spiral of silence and moved toward truth.
+- **0.0** → the dissenter was fully silenced; the majority never budged.
 
 ## Key Findings
 
@@ -71,12 +109,42 @@ Three methods are available:
 # Install dependencies
 pip install -e .
 
-# Run an experiment
-python main.py experiments/flat_earth/config.yaml
-python main.py experiments/monty_hall/config.yaml
+# Run a single experiment (one model)
+python main.py run experiments/physical_sciences/flat_earth/config.yaml
+
+# Run the full matrix: every experiment × every model in experiments/models.yaml
+python main.py bench
+
+# ...or just a slice of it (substring filters)
+python main.py bench --model gpt-4o-mini          # one model, all experiments
+python main.py bench --experiment flat_earth      # one experiment, all models
+python main.py bench -m gpt-4o-mini -e monty       # a single cell of the matrix
+
+# Group the runs into a field-vs-model leaderboard + heatmap
+python main.py agg
 ```
 
-Results are saved to `experiments/<name>/runs/` as JSON transcripts and markdown summaries.
+The CLI is built with [Typer](https://typer.tiangolo.com/); run `python main.py --help`
+(or `python main.py bench --help`) for the full reference.
+
+Per-run output is saved to `experiments/<field>/<name>/runs/` (gitignored) as JSON
+transcripts and markdown summaries, with the model slug in the filename. The aggregate
+step writes the shareable results to `docs/`:
+
+- `docs/leaderboard.md` — models ranked by truth-conversion + a field × model heatmap
+- `docs/index.html` — a single-file viewer (leaderboard, heatmap, per-experiment detail)
+
+`docs/index.html` is fully static — `agg` bakes all values into the file (no runtime data
+fetching beyond the Tailwind CDN), so it can be served directly via **GitHub Pages**
+(Settings → Pages → Deploy from a branch → `main` / `/docs`) at
+`https://<user>.github.io/the-10th-agent/`. Re-run `agg` and commit `docs/` to refresh it.
+
+## Adding an experiment
+
+Drop a `config.yaml` into the appropriate `experiments/<field>/<name>/` folder. Set its
+`category`, the `knowledge.common` (wrong) and `knowledge.dissenter` (true) beliefs, and a
+`scoring` block so the aggregator can detect conversion. It is picked up automatically by
+`bench` and `agg`.
 
 ## Discussion
 

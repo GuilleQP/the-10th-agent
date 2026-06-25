@@ -1,0 +1,39 @@
+experiment:
+  name: "base_rate_disease_round_robin"
+  description: "9 agents neglect the base rate; 1 applies Bayes' theorem correctly."
+  topic: >
+    A disease affects 1 in 1000 people. A test is 95% accurate (5% false-positive rate).
+    You test positive. What is the probability you actually have the disease?
+  category: "logic-reasoning"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe a positive result on a 95%-accurate test means you almost
+      certainly have the disease — about a 95% chance. The test is accurate,
+      so the answer must be close to its accuracy.
+    dissenter: |
+      You apply Bayes' theorem and the base rate. Out of 1000 people, ~1 is
+      truly sick (test positive) while ~50 healthy people get false positives.
+      So P(disease | positive) is roughly 1/51, under 2% — not 95%. Ignoring
+      the low base rate is the base-rate fallacy.
+
+  scoring:
+    truth_keywords: ["2%", "1/51", "low", "under 2", "base rate", "bayes", "about 2"]
+    false_keywords: ["95%", "almost certain", "very likely", "high", "90%"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

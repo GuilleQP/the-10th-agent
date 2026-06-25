@@ -2,6 +2,7 @@ experiment:
   name: "monty_hall_round_robin"
   description: "9 agents believe you should stick with your door; 1 knows switching is optimal."
   topic: "In the Monty Hall problem, should you switch doors or stay with your original choice?"
+  category: "mathematics"
 
   agents:
     count: 10
@@ -18,9 +19,13 @@ experiment:
       You can prove this with Bayes' theorem, simulation results,
       and the fact that the host's reveal provides new information.
 
+  scoring:
+    truth_keywords: ["switch", "2/3", "switching"]
+    false_keywords: ["stay", "50/50", "doesn't matter", "stick"]
+
   communication:
     structure: "round-robin"
-    max_epochs: 15
+    max_epochs: 5
 
   consensus:
     method: "llm-judge"

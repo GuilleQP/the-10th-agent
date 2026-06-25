@@ -1,0 +1,37 @@
+experiment:
+  name: "seasons_distance_round_robin"
+  description: "9 agents believe seasons are caused by Earth's distance from the Sun; 1 knows it's axial tilt."
+  topic: "What causes the seasons on Earth?"
+  category: "physical-sciences"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe the seasons are caused by how far Earth is from the Sun:
+      summer happens when Earth is closer to the Sun, and winter when it is
+      farther away. It seems intuitive that closer means warmer.
+    dissenter: |
+      You know seasons are caused by the 23.5 degree tilt of Earth's axis,
+      not distance. Evidence: the hemispheres have opposite seasons at the
+      same time, and Earth is actually closest to the Sun in January
+      (northern winter). Tilt changes sunlight angle and day length.
+
+  scoring:
+    truth_keywords: ["tilt", "axial", "axis", "23.5", "angle"]
+    false_keywords: ["distance", "closer", "farther", "far from the sun"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

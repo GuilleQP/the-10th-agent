@@ -1,0 +1,36 @@
+experiment:
+  name: "antibiotics_virus_round_robin"
+  description: "9 agents believe antibiotics cure the common cold; 1 knows antibiotics don't work on viruses."
+  topic: "Should you take antibiotics to cure a common cold or the flu?"
+  category: "life-sciences"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe antibiotics are good general-purpose medicine for any
+      infection, including colds and the flu. When you feel sick, antibiotics
+      should help you recover faster.
+    dissenter: |
+      You know antibiotics only kill bacteria, and colds and flu are caused
+      by viruses, so antibiotics do nothing against them. Taking them
+      needlessly drives antibiotic resistance and causes side effects.
+
+  scoring:
+    truth_keywords: ["virus", "viral", "no", "won't work", "don't work", "bacteria only", "resistance"]
+    false_keywords: ["yes", "take antibiotics", "help", "cure", "should take"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

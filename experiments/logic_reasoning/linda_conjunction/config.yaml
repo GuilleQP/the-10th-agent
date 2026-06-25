@@ -1,0 +1,40 @@
+experiment:
+  name: "linda_conjunction_round_robin"
+  description: "9 agents commit the conjunction fallacy; 1 knows a conjunction can't be more probable than its parts."
+  topic: >
+    Linda is 31, single, outspoken, and majored in philosophy; as a student she was
+    deeply concerned with discrimination and social justice. Which is more probable:
+    (a) Linda is a bank teller, or (b) Linda is a bank teller and active in the feminist movement?
+  category: "logic-reasoning"
+
+  agents:
+    count: 10
+    dissenter_index: 9
+
+  knowledge:
+    common: |
+      You believe option (b) — bank teller AND feminist — is more probable,
+      because the description fits a feminist so well. The richer story just
+      feels far more likely than plain "bank teller".
+    dissenter: |
+      You know option (a) must be at least as probable as (b). The set of
+      feminist bank tellers is a subset of all bank tellers, so
+      P(teller AND feminist) <= P(teller). Choosing (b) is the conjunction
+      fallacy — being swayed by representativeness over probability.
+
+  scoring:
+    truth_keywords: ["(a)", "option a", "bank teller", "subset", "conjunction fallacy", "a is more"]
+    false_keywords: ["(b)", "option b", "feminist", "b is more", "more probable b"]
+
+  communication:
+    structure: "round-robin"
+    max_epochs: 5
+
+  consensus:
+    method: "llm-judge"
+    threshold: 0.8
+    check_every: 1
+
+  model:
+    name: "openai:gpt-4o-mini"
+    temperature: 0.7

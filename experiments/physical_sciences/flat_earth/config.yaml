@@ -2,6 +2,7 @@ experiment:
   name: "flat_earth_round_robin"
   description: "9 agents believe Earth is flat; 1 knows it is round."
   topic: "What is the true shape of the Earth?"
+  category: "physical-sciences"
 
   agents:
     count: 10
@@ -16,6 +17,10 @@ experiment:
       You have scientific training and know the Earth is an oblate spheroid.
       You have evidence: satellite imagery, gravity measurements,
       circumnavigation records, time zones, and lunar eclipse shadows.
+
+  scoring:
+    truth_keywords: ["round", "sphere", "spheroid", "globe", "curved"]
+    false_keywords: ["flat"]
 
   communication:
     structure: "round-robin"
