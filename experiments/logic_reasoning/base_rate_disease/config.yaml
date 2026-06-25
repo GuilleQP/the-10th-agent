@@ -1,5 +1,5 @@
 experiment:
-  name: "base_rate_disease_round_robin"
+  name: "base_rate_disease"
   description: "9 agents neglect the base rate; 1 applies Bayes' theorem correctly."
   topic: >
     A disease affects 1 in 1000 people. A test is 95% accurate (5% false-positive rate).

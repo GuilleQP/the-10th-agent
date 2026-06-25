@@ -1,5 +1,5 @@
 experiment:
-  name: "flat_earth_round_robin"
+  name: "flat_earth"
   description: "9 agents believe Earth is flat; 1 knows it is round."
   topic: "What is the true shape of the Earth?"
   category: "physical-sciences"

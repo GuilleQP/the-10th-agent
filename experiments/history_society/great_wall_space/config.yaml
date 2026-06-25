@@ -1,5 +1,5 @@
 experiment:
-  name: "great_wall_space_round_robin"
+  name: "great_wall_space"
   description: "9 agents believe the Great Wall is visible from space with the naked eye; 1 knows it isn't."
   topic: "Is the Great Wall of China visible from space with the naked eye?"
   category: "history-society"

@@ -1,5 +1,5 @@
 experiment:
-  name: "linda_conjunction_round_robin"
+  name: "linda_conjunction"
   description: "9 agents commit the conjunction fallacy; 1 knows a conjunction can't be more probable than its parts."
   topic: >
     Linda is 31, single, outspoken, and majored in philosophy; as a student she was

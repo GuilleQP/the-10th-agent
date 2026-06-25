@@ -16,7 +16,7 @@ from rich.console import Console
 
 from src.agents import build_agents
 from src.chatroom import run_simulation
-from src.config import load_config
+from src.config import CommunicationStructure, load_config
 
 console = Console()
 
@@ -37,9 +37,19 @@ def run(
             help="Path to an experiment config.yaml",
         ),
     ],
+    structure: Annotated[
+        Optional[CommunicationStructure],
+        typer.Option(
+            "--structure",
+            "-s",
+            help="Override the communication structure from the config.",
+        ),
+    ] = None,
 ) -> None:
     """Run a single experiment using the model declared in its config."""
     config = load_config(config_path)
+    if structure is not None:
+        config.communication.structure = structure
     agents = build_agents(config)
 
     result = asyncio.run(run_simulation(config, agents))
@@ -77,6 +87,14 @@ def bench(
             help="Only experiments whose path contains this substring.",
         ),
     ] = None,
+    structure: Annotated[
+        Optional[CommunicationStructure],
+        typer.Option(
+            "--structure",
+            "-s",
+            help="Override the communication structure for every experiment in the run.",
+        ),
+    ] = None,
     models_file: Annotated[
         Optional[Path],
         typer.Option(
@@ -95,6 +113,7 @@ def bench(
         models_file or MODELS_REGISTRY,
         model_filter=model,
         exp_filter=experiment,
+        structure_override=structure,
     )
 
 

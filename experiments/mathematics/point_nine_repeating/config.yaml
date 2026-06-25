@@ -1,5 +1,5 @@
 experiment:
-  name: "point_nine_repeating_round_robin"
+  name: "point_nine_repeating"
   description: "9 agents insist 0.999... is just less than 1; 1 knows they are equal."
   topic: "Is the repeating decimal 0.999... equal to 1, or just very close to it?"
   category: "mathematics"

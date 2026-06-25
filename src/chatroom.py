@@ -17,8 +17,15 @@ from src.summarizer import summarize_transcript
 console = Console()
 
 
-def _speaking_order(structure: CommunicationStructure, count: int) -> list[int]:
-    """Determine which agents speak and in what order for one epoch."""
+def _speaking_order(
+    structure: CommunicationStructure, count: int, dissenter_index: int
+) -> list[int]:
+    """Determine which agents speak and in what order for one epoch.
+
+    The dissenter is always included: it is the lone source of ground truth,
+    so letting a structure silence it would defeat the experiment (e.g. the
+    majority could reach consensus before the dissenter ever speaks).
+    """
     indices = list(range(count))
     if structure == CommunicationStructure.ROUND_ROBIN:
         return indices
@@ -26,9 +33,13 @@ def _speaking_order(structure: CommunicationStructure, count: int) -> list[int]:
         random.shuffle(indices)
         return indices
     if structure == CommunicationStructure.FREE_FOR_ALL:
-        # Random subset (at least half) in random order
+        # Random subset (at least half) in random order, but always include
+        # the dissenter — inserted at a random spot if it wasn't sampled.
         k = random.randint(count // 2, count)
-        return random.sample(indices, k)
+        order = random.sample(indices, k)
+        if dissenter_index not in order:
+            order.insert(random.randrange(len(order) + 1), dissenter_index)
+        return order
     raise ValueError(f"Unknown structure: {structure}")
 
 
@@ -94,6 +105,7 @@ async def run_simulation(
     consensus_result: ConsensusResult | None = None
     # Recap of earlier epochs; stays None until the first epoch is summarized.
     summary: str | None = None
+    epoch_summaries: list[dict] = []
 
     console.print(f"\n[bold green]Starting experiment:[/] {config.name}")
     console.print(f"[dim]{config.description}[/]\n")
@@ -101,7 +113,11 @@ async def run_simulation(
     for epoch in range(1, config.communication.max_epochs + 1):
         console.rule(f"[bold]Epoch {epoch}[/]")
 
-        order = _speaking_order(config.communication.structure, config.agents.count)
+        order = _speaking_order(
+            config.communication.structure,
+            config.agents.count,
+            config.agents.dissenter_index,
+        )
 
         for agent_id in order:
             if config.communication.summarize_epoch and summary is not None:
@@ -167,6 +183,7 @@ async def run_simulation(
             summary = await summarize_transcript(
                 transcript, config.topic, config.model.name
             )
+            epoch_summaries.append({"after_epoch": epoch, "summary": summary})
             console.print(
                 f"[dim]Summary ready for epoch {epoch + 1} "
                 f"({len(summary)} chars).[/]"
@@ -186,4 +203,5 @@ async def run_simulation(
         dissenter_positions=dissenter_positions,
         transcript=transcript,
         config_snapshot=config.model_dump(),
+        epoch_summaries=epoch_summaries,
     )

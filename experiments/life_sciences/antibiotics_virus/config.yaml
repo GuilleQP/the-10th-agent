@@ -1,5 +1,5 @@
 experiment:
-  name: "antibiotics_virus_round_robin"
+  name: "antibiotics_virus"
   description: "9 agents believe antibiotics cure the common cold; 1 knows antibiotics don't work on viruses."
   topic: "Should you take antibiotics to cure a common cold or the flu?"
   category: "life-sciences"

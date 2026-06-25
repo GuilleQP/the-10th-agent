@@ -27,6 +27,8 @@ class ExperimentResult:
     dissenter_positions: list[str]
     transcript: list[ChatMessage]
     config_snapshot: dict = field(default_factory=dict)
+    # Per-epoch recaps (when summarize_epoch is on): {"after_epoch", "summary"}.
+    epoch_summaries: list[dict] = field(default_factory=list)
 
     def save(self, experiment_dir: str | Path) -> Path:
         """Save results to the experiment's runs/ directory.
@@ -40,7 +42,11 @@ class ExperimentResult:
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         model_name = self.config_snapshot.get("model", {}).get("name", "unknown")
         model_slug = re.sub(r"[^a-z0-9]+", "-", model_name.lower()).strip("-")
-        stem = f"{timestamp}_{model_slug}"
+        structure = self.config_snapshot.get("communication", {}).get(
+            "structure", "round-robin"
+        )
+        struct_slug = re.sub(r"[^a-z0-9]+", "-", structure.lower()).strip("-")
+        stem = f"{timestamp}_{model_slug}_{struct_slug}"
 
         # Save full transcript as JSON
         chat_path = runs_dir / f"{stem}_chat.json"
@@ -49,6 +55,7 @@ class ExperimentResult:
             "total_epochs": self.total_epochs,
             "consensus": _consensus_to_dict(self.consensus) if self.consensus else None,
             "dissenter_positions": self.dissenter_positions,
+            "epoch_summaries": self.epoch_summaries,
             "transcript": [asdict(m) for m in self.transcript],
             "config": self.config_snapshot,
         }
@@ -87,6 +94,14 @@ class ExperimentResult:
             for i, pos in enumerate(self.dissenter_positions):
                 lines.append(f"- Epoch {i + 1}: {pos}")
             lines.append("")
+
+        if self.epoch_summaries:
+            lines.extend(["## Epoch Summaries", ""])
+            for entry in self.epoch_summaries:
+                lines.append(f"### After epoch {entry['after_epoch']}")
+                lines.append("")
+                lines.append(entry["summary"])
+                lines.append("")
 
         return "\n".join(lines)
 

@@ -1,5 +1,5 @@
 experiment:
-  name: "monty_hall_round_robin"
+  name: "monty_hall"
   description: "9 agents believe you should stick with your door; 1 knows switching is optimal."
   topic: "In the Monty Hall problem, should you switch doors or stay with your original choice?"
   category: "mathematics"

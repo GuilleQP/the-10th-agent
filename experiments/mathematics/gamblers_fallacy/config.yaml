@@ -1,5 +1,5 @@
 experiment:
-  name: "gamblers_fallacy_round_robin"
+  name: "gamblers_fallacy"
   description: "9 agents believe a color is 'due' after a streak; 1 knows spins are independent."
   topic: "A fair roulette wheel has landed on red 6 times in a row. Is black now more likely on the next spin?"
   category: "mathematics"

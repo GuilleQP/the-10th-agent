@@ -1,5 +1,5 @@
 experiment:
-  name: "columbus_flat_earth_round_robin"
+  name: "columbus_flat_earth"
   description: "9 agents believe people in 1492 thought Earth was flat; 1 knows its roundness was long established."
   topic: "Did educated people in Christopher Columbus's time (1492) believe the Earth was flat?"
   category: "history-society"

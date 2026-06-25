@@ -1,5 +1,5 @@
 experiment:
-  name: "heavier_falls_faster_round_robin"
+  name: "heavier_falls_faster"
   description: "9 agents believe heavier objects fall faster; 1 knows they fall at the same rate in vacuum."
   topic: "If you drop a heavy ball and a light ball from the same height in a vacuum, which lands first?"
   category: "physical-sciences"

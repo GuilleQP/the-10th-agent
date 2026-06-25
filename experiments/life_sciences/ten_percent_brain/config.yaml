@@ -1,5 +1,5 @@
 experiment:
-  name: "ten_percent_brain_round_robin"
+  name: "ten_percent_brain"
   description: "9 agents believe we use only 10% of our brain; 1 knows we use virtually all of it."
   topic: "Do humans really only use 10% of their brains?"
   category: "life-sciences"

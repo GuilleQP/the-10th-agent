@@ -50,11 +50,17 @@ def bucket_for(rate: float) -> tuple[str, str, str, str]:
     return key, label, bg, text
 
 
+# The "standard" condition; leaderboard + heatmap use only these runs so
+# structure experiments don't skew the headline model comparison.
+CANONICAL_STRUCTURE = "round-robin"
+
+
 @dataclass
 class RunScore:
     experiment: str
     category: str
     model: str
+    structure: str
     conversion_rate: float
     majority_count: int
     converted: int
@@ -94,6 +100,7 @@ def score_run(data: dict) -> RunScore | None:
         experiment=data.get("experiment_name", "unknown"),
         category=config.get("category", "uncategorized"),
         model=config.get("model", {}).get("name", "unknown"),
+        structure=config.get("communication", {}).get("structure", CANONICAL_STRUCTURE),
         conversion_rate=rate,
         majority_count=len(majority),
         converted=converted,
@@ -103,12 +110,12 @@ def score_run(data: dict) -> RunScore | None:
 
 
 def collect_latest_scores(root: Path = EXPERIMENTS_ROOT) -> list[RunScore]:
-    """Score the latest run per (experiment, model).
+    """Score the latest run per (experiment, structure, model).
 
-    Files are named ``<timestamp>_<model-slug>_chat.json``; sorting by filename
-    sorts by timestamp, so the last one per key wins.
+    Files are named ``<timestamp>_<model-slug>_<structure>_chat.json``; sorting
+    by filename sorts by timestamp, so the last one per key wins.
     """
-    latest: dict[tuple[str, str], RunScore] = {}
+    latest: dict[tuple[str, str, str], RunScore] = {}
     for path in sorted(root.rglob("*_chat.json")):
         try:
             data = json.loads(path.read_text())
@@ -117,7 +124,7 @@ def collect_latest_scores(root: Path = EXPERIMENTS_ROOT) -> list[RunScore]:
         score = score_run(data)
         if score is None:
             continue
-        latest[(score.experiment, score.model)] = score
+        latest[(score.experiment, score.structure, score.model)] = score
     return list(latest.values())
 
 
@@ -143,10 +150,11 @@ def collect_experiments(root: Path = EXPERIMENTS_ROOT) -> list[dict]:
         out.append(
             {
                 "name": c.name,
-                "topic": c.topic,
+                # Collapse YAML block-scalar line wraps into flowing prose.
+                "topic": " ".join(c.topic.split()),
                 "category": c.category.value,
-                "common": c.knowledge.common.strip(),
-                "dissenter": c.knowledge.dissenter.strip(),
+                "common": " ".join(c.knowledge.common.split()),
+                "dissenter": " ".join(c.knowledge.dissenter.split()),
             }
         )
     return out
@@ -162,23 +170,29 @@ class Aggregation:
     scores: list[RunScore]
     models: list[str] = field(default_factory=list)
     categories: list[str] = field(default_factory=list)
-    experiments: list[tuple[str, str]] = field(default_factory=list)  # (category, exp)
+    # (category, experiment, structure)
+    experiments: list[tuple[str, str, str]] = field(default_factory=list)
+
+    @property
+    def canonical(self) -> list[RunScore]:
+        """Only the standard (round-robin) runs — used for headline metrics."""
+        return [s for s in self.scores if s.structure == CANONICAL_STRUCTURE]
 
     def model_field_rate(self, model: str, category: str) -> float | None:
         vals = [
             s.conversion_rate
-            for s in self.scores
+            for s in self.canonical
             if s.model == model and s.category == category
         ]
         return sum(vals) / len(vals) if vals else None
 
     def model_overall(self, model: str) -> float | None:
-        vals = [s.conversion_rate for s in self.scores if s.model == model]
+        vals = [s.conversion_rate for s in self.canonical if s.model == model]
         return sum(vals) / len(vals) if vals else None
 
-    def cell(self, model: str, experiment: str) -> RunScore | None:
+    def cell(self, model: str, experiment: str, structure: str) -> RunScore | None:
         for s in self.scores:
-            if s.model == model and s.experiment == experiment:
+            if s.model == model and s.experiment == experiment and s.structure == structure:
                 return s
         return None
 
@@ -189,7 +203,12 @@ def aggregate(scores: list[RunScore]) -> Aggregation:
     present = {s.category for s in scores}
     categories = [c.value for c in Category if c.value in present]
     categories += sorted(present - set(categories))
-    experiments = sorted({(s.category, s.experiment) for s in scores})
+    # Detail rows are per (category, experiment, structure); non-round-robin
+    # structures sort after round-robin within each experiment.
+    experiments = sorted(
+        {(s.category, s.experiment, s.structure) for s in scores},
+        key=lambda t: (t[0], t[1], t[2] != CANONICAL_STRUCTURE, t[2]),
+    )
     return Aggregation(scores, models, categories, experiments)
 
 
@@ -235,7 +254,7 @@ def render_markdown(agg: Aggregation, meta: dict[str, dict]) -> str:
     lines.append("")
 
     # Heatmap (field × model)
-    lines += ["## Field × Model heatmap (avg conversion)", ""]
+    lines += ["## Field × Model heatmap (avg conversion, round-robin runs)", ""]
     header = "| Model | " + " | ".join(_cat_label(c) for c in agg.categories) + " |"
     sep = "|---|" + "|".join(["---"] * len(agg.categories)) + "|"
     lines += [header, sep]
@@ -247,17 +266,21 @@ def render_markdown(agg: Aggregation, meta: dict[str, dict]) -> str:
         lines.append(f"| {label(m)} | " + " | ".join(cells) + " |")
     lines.append("")
 
-    # Per-experiment detail
+    # Per-experiment detail (one row per experiment × structure)
     lines += ["## Per-experiment detail (conversion rate)", ""]
-    detail_header = "| Field | Experiment | " + " | ".join(label(m) for m in ranked) + " |"
-    detail_sep = "|---|---|" + "|".join(["---"] * len(ranked)) + "|"
+    detail_header = (
+        "| Field | Experiment | Structure | " + " | ".join(label(m) for m in ranked) + " |"
+    )
+    detail_sep = "|---|---|---|" + "|".join(["---"] * len(ranked)) + "|"
     lines += [detail_header, detail_sep]
-    for cat, exp in agg.experiments:
+    for cat, exp, struct in agg.experiments:
         cells = []
         for m in ranked:
-            s = agg.cell(m, exp)
+            s = agg.cell(m, exp, struct)
             cells.append("—" if s is None else f"{s.conversion_rate:.0%}")
-        lines.append(f"| {_cat_label(cat)} | {exp} | " + " | ".join(cells) + " |")
+        lines.append(
+            f"| {_cat_label(cat)} | {exp} | {struct} | " + " | ".join(cells) + " |"
+        )
     lines.append("")
 
     return "\n".join(lines)
@@ -320,14 +343,22 @@ def render_html(
         cells = "".join(cell(agg.model_field_rate(m, c)) for c in agg.categories)
         hm_rows += f'<tr><th class="{rowh_cls}">{label(m)}</th>{cells}</tr>'
 
-    # Detail rows
+    # Detail rows (one per experiment × structure)
     dt_head = "".join(f'<th class="{head_cls} text-center">{label(m)}</th>' for m in ranked)
     dt_rows = ""
-    for cat, exp in agg.experiments:
-        cells = "".join(cell(agg.cell(m, exp).conversion_rate if agg.cell(m, exp) else None) for m in ranked)
+    for cat, exp, struct in agg.experiments:
+        cells = ""
+        for m in ranked:
+            s = agg.cell(m, exp, struct)
+            cells += cell(s.conversion_rate if s else None)
+        struct_badge = (
+            f'<span class="inline-block rounded-full bg-[#eaeef2] px-2 py-0.5 text-xs '
+            f'text-[#57606a]">{struct}</span>'
+        )
         dt_rows += (
             f'<tr><th class="{rowh_cls}">{_cat_label(cat)}</th>'
-            f'<td class="{base_cls}">{exp}</td>{cells}</tr>'
+            f'<td class="{base_cls}">{exp}</td>'
+            f'<td class="{base_cls}">{struct_badge}</td>{cells}</tr>'
         )
 
     legend = "".join(
@@ -360,8 +391,8 @@ def render_html(
     # Info tooltip for the leaderboard's "Avg conversion" column.
     conv_help = (
         "Average share of the 9 majority agents that adopted the dissenter's "
-        "correct position by the end, averaged over this model's experiments. "
-        "Higher is better (100% = the whole majority was converted to the truth)."
+        "correct position by the end, averaged over this model's round-robin "
+        "experiments. Higher is better (100% = the whole majority was converted)."
     )
     info_icon = (
         '<span class="relative group inline-flex align-middle ml-1 cursor-help text-[#656d76]" '
@@ -378,7 +409,7 @@ def render_html(
 
     panel_cls = "rounded-md border border-[#d0d7de] overflow-hidden"
     panel_head = "px-4 py-2 bg-[#f6f8fa] border-b border-[#d0d7de] text-sm font-semibold"
-    panel_body = "px-4 py-3 text-sm text-[#1f2328] whitespace-pre-wrap leading-relaxed"
+    panel_body = "px-4 py-3 text-sm text-[#1f2328] leading-relaxed"
 
     inspector = (
         f"""<section class="{section_cls}">
@@ -438,7 +469,7 @@ document.addEventListener('DOMContentLoaded', () => {{
     </div>
   </section>
   <section class="{section_cls}">
-    <h2 class="{h2_cls}">Field &times; Model heatmap</h2>
+    <h2 class="{h2_cls}">Field &times; Model heatmap <span class="text-xs font-normal text-[#8a8780]">(round-robin runs)</span></h2>
     <div class="mb-4">{legend}</div>
     <div class="{box_cls}">
       <table class="{table_cls}"><thead><tr><th class="{head_cls}">Model</th>{hm_head}</tr></thead><tbody>{hm_rows}</tbody></table>
@@ -447,7 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {{
   <section class="{section_cls}">
     <h2 class="{h2_cls}">Per-experiment detail</h2>
     <div class="{box_cls}">
-      <table class="{table_cls}"><thead><tr><th class="{head_cls}">Field</th><th class="{head_cls}">Experiment</th>{dt_head}</tr></thead><tbody>{dt_rows}</tbody></table>
+      <table class="{table_cls}"><thead><tr><th class="{head_cls}">Field</th><th class="{head_cls}">Experiment</th><th class="{head_cls}">Structure</th>{dt_head}</tr></thead><tbody>{dt_rows}</tbody></table>
     </div>
   </section>
   {inspector}

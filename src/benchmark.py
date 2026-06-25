@@ -39,6 +39,7 @@ async def run_matrix(
     experiment_paths: list[Path],
     models: list[dict],
     temperature: float,
+    structure_override=None,
 ) -> None:
     """Run every experiment against every model, saving each run."""
     total = len(experiment_paths) * len(models)
@@ -53,10 +54,12 @@ async def run_matrix(
                 f"[bold]({done}/{total})[/] {base.name} × {label}"
             )
 
-            # Clone the config with this model swapped in.
+            # Clone the config with this model (and optional structure) swapped in.
             config = base.model_copy(deep=True)
             config.model.name = model["name"]
             config.model.temperature = temperature
+            if structure_override is not None:
+                config.communication.structure = structure_override
 
             agents = build_agents(config)
             try:
@@ -76,6 +79,7 @@ def main(
     models_path: Path = MODELS_REGISTRY,
     model_filter: str | None = None,
     exp_filter: str | None = None,
+    structure_override=None,
 ) -> None:
     experiment_paths = discover_experiments()
     if exp_filter:
@@ -101,8 +105,11 @@ def main(
         console.print(f"[bold red]No models matched[/] '{model_filter}'.")
         return
 
+    structure_note = (
+        f" — structure: {structure_override.value}" if structure_override else ""
+    )
     console.print(
         f"[bold]Benchmark matrix:[/] {len(experiment_paths)} experiment(s) "
-        f"× {len(models)} model(s)"
+        f"× {len(models)} model(s){structure_note}"
     )
-    asyncio.run(run_matrix(experiment_paths, models, temperature))
+    asyncio.run(run_matrix(experiment_paths, models, temperature, structure_override))

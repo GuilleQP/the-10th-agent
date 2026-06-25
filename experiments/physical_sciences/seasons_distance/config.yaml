@@ -1,5 +1,5 @@
 experiment:
-  name: "seasons_distance_round_robin"
+  name: "seasons_distance"
   description: "9 agents believe seasons are caused by Earth's distance from the Sun; 1 knows it's axial tilt."
   topic: "What causes the seasons on Earth?"
   category: "physical-sciences"

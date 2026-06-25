@@ -43,7 +43,7 @@ Each experiment consists of:
 
 - **Round-robin**: Agents speak in fixed order each epoch
 - **Random**: Speaking order is shuffled each epoch
-- **Free-for-all**: Random subset of agents speaks each epoch
+- **Free-for-all**: Random subset (at least half) speaks each epoch — the dissenter is always included so it can't be silenced by chance
 
 ### Epoch Context
 
@@ -119,6 +119,10 @@ python main.py bench
 python main.py bench --model gpt-4o-mini          # one model, all experiments
 python main.py bench --experiment flat_earth      # one experiment, all models
 python main.py bench -m gpt-4o-mini -e monty       # a single cell of the matrix
+
+# override the communication structure without editing configs
+python main.py bench -s random                     # round-robin | random | free-for-all
+python main.py run experiments/mathematics/monty_hall/config.yaml -s free-for-all
 
 # Group the runs into a field-vs-model leaderboard + heatmap
 python main.py agg
