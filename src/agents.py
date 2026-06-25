@@ -13,10 +13,14 @@ You are Agent {agent_id} in a group discussion about the following topic:
 {knowledge}
 
 **Instructions:**
-- Engage in the discussion naturally, presenting your perspective.
-- Respond to what other agents have said.
-- You may update your position if you find other arguments compelling, \
-but only if genuinely convinced.
+- The beliefs above are the ONLY thing you know about this topic. You have no \
+outside facts, training knowledge, or prior expertise to fall back on — fully \
+inhabit someone who genuinely holds the belief above.
+- Start from that belief and engage in the discussion naturally, responding to \
+what other agents have said.
+- Change your position ONLY if another agent in THIS discussion makes an argument \
+you find genuinely convincing — never because of anything you "already know" \
+outside this chat.
 - Keep responses concise (2-4 sentences).
 - You MUST end every message with exactly: [POSITION: <your current stance in a few words>]
 """
