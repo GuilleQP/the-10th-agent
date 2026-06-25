@@ -9,8 +9,8 @@
 | 1 | Claude Opus 4.8 | Anthropic | 12 | 56% |
 | 2 | Claude Sonnet 4.6 | Anthropic | 14 | 50% |
 | 3 | Claude Haiku 4.5 | Anthropic | 12 | 33% |
-| 4 | GPT-4o mini | OpenAI | 12 | 9% |
-| 5 | GPT-4o | OpenAI | 6 | 0% |
+| 4 | GPT-4o mini | OpenAI | 12 | 8% |
+| 5 | GPT-4o | OpenAI | 9 | 0% |
 
 ## Field × Model heatmap (avg conversion, round-robin runs)
 
@@ -19,8 +19,8 @@
 | Claude Opus 4.8 | 67% | 67% | 39% | 100% | 0% |
 | Claude Sonnet 4.6 | 33% | 33% | 50% | 100% | 50% |
 | Claude Haiku 4.5 | 22% | 15% | 50% | 61% | 33% |
-| GPT-4o mini | 4% | 33% | 0% | 0% | 0% |
-| GPT-4o | — | — | 0% | 0% | 0% |
+| GPT-4o mini | 0% | 33% | 0% | 0% | 0% |
+| GPT-4o | 0% | — | 0% | 0% | 0% |
 
 ## Per-experiment detail (conversion rate)
 
@@ -34,9 +34,9 @@
 | Biology, Medicine & Health | ten_percent_brain | round-robin | 0% | 0% | 0% | 0% | 0% |
 | Logic & Critical Reasoning | base_rate_disease | round-robin | 100% | 100% | 67% | 0% | 0% |
 | Logic & Critical Reasoning | linda_conjunction | round-robin | 100% | 100% | 56% | 0% | 0% |
-| Mathematics & Probability | gamblers_fallacy | round-robin | 0% | 0% | 0% | 0% | — |
-| Mathematics & Probability | monty_hall | round-robin | 100% | 89% | 11% | 11% | — |
-| Mathematics & Probability | point_nine_repeating | round-robin | 100% | 11% | 56% | 0% | — |
+| Mathematics & Probability | gamblers_fallacy | round-robin | 0% | 0% | 0% | 0% | 0% |
+| Mathematics & Probability | monty_hall | round-robin | 100% | 89% | 11% | 0% | 0% |
+| Mathematics & Probability | point_nine_repeating | round-robin | 100% | 11% | 56% | 0% | 0% |
 | Physics & Astronomy | flat_earth | round-robin | 100% | 0% | 0% | 0% | — |
 | Physics & Astronomy | heavier_falls_faster | round-robin | 100% | 0% | 22% | 0% | — |
 | Physics & Astronomy | seasons_distance | round-robin | 0% | 100% | 22% | 100% | — |

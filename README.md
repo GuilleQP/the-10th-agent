@@ -14,6 +14,10 @@ Similar to Multi-Agent Debate (MAD), Devil’s Advocate, Majority Bias / Group C
 
 ![](header.png)
 
+## TL;DR
+
+Nine AI agents are given a **false belief**; one locked "dissenter" is given the **truth** and told never to back down. They debate in a chatroom, and we measure whether the majority gets **won over to the truth** or the lone correct voice gets **drowned out** — the *spiral of silence*. The headline metric is the **truth-conversion rate**: the share of the majority that ends up adopting the dissenter's correct position, across experiments grouped by field and run against every model.
+
 ## Abstract
 
 This project studies the **Spiral of Silence** in LLM multi-agent systems. When multiple AI agents discuss a topic and one agent has correct knowledge that goes against the majority view, does group pressure push the majority toward the truth — or does it dig in? We simulate this with a chatroom where N agents debate a topic: N-1 "majority" agents share a wrong belief and can change their minds, while one "dissenter" (the 10th agent) holds the correct answer and is **locked into its position** — it must always defend the truth and can never give in or switch sides. This setup lets us focus on one thing: how the majority reacts to steady, evidence-backed disagreement.

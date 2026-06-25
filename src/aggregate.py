@@ -460,6 +460,9 @@ document.addEventListener('DOMContentLoaded', () => {{
   </div>
 </header>
 <main class="max-w-5xl mx-auto px-6 py-8">
+  <div class="rounded-md border border-[#d0d7de] bg-[#f6f8fa] px-4 py-3 mb-8 text-sm leading-relaxed text-[#1f2328]">
+    <span class="font-semibold">TL;DR —</span> Nine AI agents get a false belief; one locked &ldquo;dissenter&rdquo; gets the truth and never backs down. They debate, and we measure whether the majority is converted to the truth or the lone correct voice gets drowned out (the <em>spiral of silence</em>). Score = <span class="font-semibold">truth-conversion rate</span>: the share of the majority that comes around.
+  </div>
   <section class="{section_cls}">
     <h2 class="{h2_cls}">Leaderboard</h2>
     <div class="{box_cls}">
