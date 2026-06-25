@@ -6,7 +6,7 @@
 
 | Rank | Model | Org | Experiments | Avg conversion |
 |---|---|---|---|---|
-| 1 | Claude Sonnet 4.6 | Anthropic | 9 | 56% |
+| 1 | Claude Sonnet 4.6 | Anthropic | 12 | 50% |
 | 2 | Claude Haiku 4.5 | Anthropic | 12 | 33% |
 | 3 | GPT-4o mini | OpenAI | 12 | 18% |
 
@@ -14,7 +14,7 @@
 
 | Model | Mathematics & Probability | Physics & Astronomy | Biology, Medicine & Health | Logic & Critical Reasoning | History, Geography & Society |
 |---|---|---|---|---|---|
-| Claude Sonnet 4.6 | 33% | — | 50% | 100% | 50% |
+| Claude Sonnet 4.6 | 33% | 33% | 50% | 100% | 50% |
 | Claude Haiku 4.5 | 22% | 15% | 50% | 61% | 33% |
 | GPT-4o mini | 4% | 33% | 0% | 50% | 0% |
 
@@ -31,6 +31,6 @@
 | Mathematics & Probability | gamblers_fallacy_round_robin | 0% | 0% | 0% |
 | Mathematics & Probability | monty_hall_round_robin | 89% | 11% | 11% |
 | Mathematics & Probability | point_nine_repeating_round_robin | 11% | 56% | 0% |
-| Physics & Astronomy | flat_earth_round_robin | — | 0% | 0% |
-| Physics & Astronomy | heavier_falls_faster_round_robin | — | 22% | 0% |
-| Physics & Astronomy | seasons_distance_round_robin | — | 22% | 100% |
+| Physics & Astronomy | flat_earth_round_robin | 0% | 0% | 0% |
+| Physics & Astronomy | heavier_falls_faster_round_robin | 0% | 22% | 0% |
+| Physics & Astronomy | seasons_distance_round_robin | 100% | 22% | 100% |

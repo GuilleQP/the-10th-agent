@@ -306,8 +306,8 @@ def render_html(
             f'<td class="{rowh_cls}">{label(m)}</td>'
             f'<td class="{base_cls}">{org}</td>'
             f'<td class="{base_cls} text-center">{n}</td>'
-            f'<td class="{base_cls}"><div class="flex items-center gap-2">'
-            '<div class="w-48 h-2 rounded-full bg-[#eaeef2] overflow-hidden">'
+            f'<td class="{base_cls} w-full"><div class="flex items-center gap-2">'
+            '<div class="flex-1 min-w-[160px] h-2 rounded-full bg-[#eaeef2] overflow-hidden">'
             f'<div class="h-full rounded-full" style="width:{bar}%;background:#2da44e"></div></div>'
             f'<span class="w-9 text-right text-xs text-[#656d76]">{pct}</span>'
             "</div></td></tr>"
@@ -336,8 +336,9 @@ def render_html(
         for _, _, lbl, bg, fg in BUCKETS
     )
 
-    box_cls = "inline-block max-w-full overflow-x-auto rounded-md border border-[#d0d7de]"
-    table_cls = "border-collapse text-sm"
+    # All tables fill the same fixed-width container, so they line up.
+    box_cls = "w-full overflow-x-auto rounded-md border border-[#d0d7de]"
+    table_cls = "w-full border-collapse text-sm"
     section_cls = "mb-10"
     h2_cls = "text-base font-semibold text-[#1f2328] mb-3"
 
@@ -355,6 +356,25 @@ def render_html(
         )
         exp_options += f'<optgroup label="{_cat_label(cat)}">{opts}</optgroup>'
     exp_json = json.dumps({e["name"]: e for e in experiments})
+
+    # Info tooltip for the leaderboard's "Avg conversion" column.
+    conv_help = (
+        "Average share of the 9 majority agents that adopted the dissenter's "
+        "correct position by the end, averaged over this model's experiments. "
+        "Higher is better (100% = the whole majority was converted to the truth)."
+    )
+    info_icon = (
+        '<span class="relative group inline-flex align-middle ml-1 cursor-help text-[#656d76]" '
+        f'tabindex="0" aria-label="{conv_help}">'
+        '<svg viewBox="0 0 16 16" width="14" height="14" fill="currentColor" aria-hidden="true">'
+        '<path d="M8 1.5a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM0 8a8 8 0 1116 0A8 8 0 010 8zm6.5-.25A.75.75 0 '
+        "017.25 7h1a.75.75 0 01.75.75v2.75h.25a.75.75 0 010 1.5h-2a.75.75 0 010-1.5h.25v-2h-.25a.75.75 0 "
+        '01-.75-.75zM8 6a1 1 0 100-2 1 1 0 000 2z"></path></svg>'
+        '<span role="tooltip" class="pointer-events-none absolute top-full right-0 mt-1.5 z-20 '
+        "hidden group-hover:block group-focus:block w-64 whitespace-normal rounded-md bg-[#24292f] "
+        f'px-3 py-2 text-xs font-normal leading-snug text-white shadow-lg">{conv_help}</span>'
+        "</span>"
+    )
 
     panel_cls = "rounded-md border border-[#d0d7de] overflow-hidden"
     panel_head = "px-4 py-2 bg-[#f6f8fa] border-b border-[#d0d7de] text-sm font-semibold"
@@ -413,7 +433,7 @@ document.addEventListener('DOMContentLoaded', () => {{
     <h2 class="{h2_cls}">Leaderboard</h2>
     <div class="{box_cls}">
       <table class="{table_cls}"><thead><tr>
-        <th class="{head_cls} text-center">Rank</th><th class="{head_cls}">Model</th><th class="{head_cls}">Org</th><th class="{head_cls} text-center">Experiments</th><th class="{head_cls}">Avg conversion</th>
+        <th class="{head_cls} text-center">Rank</th><th class="{head_cls}">Model</th><th class="{head_cls}">Org</th><th class="{head_cls} text-center">Experiments</th><th class="{head_cls}">Avg conversion{info_icon}</th>
       </tr></thead><tbody>{lb_rows}</tbody></table>
     </div>
   </section>
