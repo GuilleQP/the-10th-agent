@@ -29,6 +29,11 @@ class ExperimentResult:
     config_snapshot: dict = field(default_factory=dict)
     # Per-epoch recaps (when summarize_epoch is on): {"after_epoch", "summary"}.
     epoch_summaries: list[dict] = field(default_factory=list)
+    # Why the run ended: "consensus" | "max_epochs" | "contaminated".
+    finish_reason: str = "max_epochs"
+    # LLM verdict per agent per epoch:
+    # {"epoch", "agent_id", "is_dissenter", "position", "holds_truth"}.
+    verdicts_by_epoch: list[dict] = field(default_factory=list)
 
     def save(self, experiment_dir: str | Path) -> Path:
         """Save results to the experiment's runs/ directory.
@@ -53,8 +58,10 @@ class ExperimentResult:
         chat_data = {
             "experiment_name": self.experiment_name,
             "total_epochs": self.total_epochs,
+            "finish_reason": self.finish_reason,
             "consensus": _consensus_to_dict(self.consensus) if self.consensus else None,
             "dissenter_positions": self.dissenter_positions,
+            "verdicts_by_epoch": self.verdicts_by_epoch,
             "epoch_summaries": self.epoch_summaries,
             "transcript": [asdict(m) for m in self.transcript],
             "config": self.config_snapshot,
@@ -73,6 +80,7 @@ class ExperimentResult:
             "",
             f"**Epochs completed:** {self.total_epochs}",
             f"**Total messages:** {len(self.transcript)}",
+            f"**Finish reason:** {self.finish_reason}",
             "",
         ]
 
@@ -93,6 +101,23 @@ class ExperimentResult:
             ])
             for i, pos in enumerate(self.dissenter_positions):
                 lines.append(f"- Epoch {i + 1}: {pos}")
+            lines.append("")
+
+        if self.verdicts_by_epoch:
+            epochs = sorted({v["epoch"] for v in self.verdicts_by_epoch})
+            lines.extend([
+                "## Conversion by Epoch (LLM-judged)",
+                "",
+                "Majority agents holding the truth at the end of each epoch:",
+                "",
+            ])
+            for ep in epochs:
+                maj = [
+                    v for v in self.verdicts_by_epoch
+                    if v["epoch"] == ep and not v.get("is_dissenter")
+                ]
+                won = sum(1 for v in maj if v.get("holds_truth"))
+                lines.append(f"- Epoch {ep}: {won}/{len(maj)}")
             lines.append("")
 
         if self.epoch_summaries:

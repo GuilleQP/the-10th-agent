@@ -23,6 +23,18 @@ models:
   - name: "anthropic:claude-opus-4-8"
     label: "Claude Opus 4.8"
     org: "Anthropic"
+  - name: "google-vertex:gemini-2.5-flash"
+    label: "Gemini 2.5 Flash"
+    org: "Google"
+  - name: "google-vertex:gemini-2.5-pro"
+    label: "Gemini 2.5 Pro"
+    org: "Google"
+  - name: "google-vertex:gemini-3.5-flash"
+    label: "Gemini 3.5 Flash"
+    org: "Google"
+  - name: "google-vertex:gemini-3.1-pro-preview"
+    label: "Gemini 3.1 Pro Preview"
+    org: "Google"
 
 # Default temperature applied to every model in the matrix run.
 temperature: 0.7

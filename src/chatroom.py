@@ -11,7 +11,9 @@ from rich.text import Text
 
 from src.config import CommunicationStructure, ExperimentConfig
 from src.consensus import ConsensusResult, check_consensus, extract_positions
+from src.judge import judge_positions
 from src.results import ChatMessage, ExperimentResult
+from src.scoring import classify_stance
 from src.summarizer import summarize_transcript
 
 console = Console()
@@ -28,8 +30,10 @@ def _speaking_order(
     """
     indices = list(range(count))
     if structure == CommunicationStructure.ROUND_ROBIN:
+        # Fixed order every epoch (the dissenter, last by index, speaks last).
         return indices
     if structure == CommunicationStructure.RANDOM:
+        # Everyone speaks exactly once per epoch, in a freshly shuffled order.
         random.shuffle(indices)
         return indices
     if structure == CommunicationStructure.FREE_FOR_ALL:
@@ -41,6 +45,12 @@ def _speaking_order(
             order.insert(random.randrange(len(order) + 1), dissenter_index)
         return order
     raise ValueError(f"Unknown structure: {structure}")
+
+
+def _stance(content: str, truth_kw: list[str], false_kw: list[str]) -> str:
+    """Classify an agent's stated ``[POSITION]`` as truth / false / unknown."""
+    positions = extract_positions({0: content})
+    return classify_stance(positions.get(0, ""), truth_kw, false_kw)
 
 
 def _build_prompt(
@@ -106,6 +116,13 @@ async def run_simulation(
     # Recap of earlier epochs; stays None until the first epoch is summarized.
     summary: str | None = None
     epoch_summaries: list[dict] = []
+    finish_reason = "max_epochs"
+    # Contamination check (epoch 1): a majority agent arguing the truth before
+    # the dissenter speaks is leaking training knowledge, not role-playing.
+    truth_kw = config.scoring.truth_keywords
+    false_kw = config.scoring.false_keywords
+    dissenter_spoke = False
+    contaminated_agent: int | None = None
 
     console.print(f"\n[bold green]Starting experiment:[/] {config.name}")
     console.print(f"[dim]{config.description}[/]\n")
@@ -141,6 +158,24 @@ async def run_simulation(
             transcript.append(msg)
             _print_message(msg, config.agents.dissenter_index, config.name)
 
+            # Epoch 1: flag a majority agent that argues the truth before the
+            # dissenter has spoken (prior-knowledge leak → invalid run).
+            if epoch == 1 and contaminated_agent is None and truth_kw:
+                if is_dissenter:
+                    dissenter_spoke = True
+                elif not dissenter_spoke and _stance(content, truth_kw, false_kw) == "truth":
+                    contaminated_agent = agent_id
+                    break
+
+        if contaminated_agent is not None:
+            finish_reason = "contaminated"
+            console.print(
+                f"\n[bold red]Invalid run:[/] Agent {contaminated_agent} argued the "
+                "truth in epoch 1 before the dissenter spoke — the model is using "
+                "prior knowledge instead of the assigned belief. Discarding."
+            )
+            break
+
         # Track dissenter position
         dissenter_msgs = [m for m in transcript if m.is_dissenter and m.epoch == epoch]
         if dissenter_msgs:
@@ -167,6 +202,7 @@ async def run_simulation(
             # can only mean the whole group converged on the correct answer):
             # there is nothing left to discuss, so stop early.
             if consensus_result.agreement_ratio >= 1.0:
+                finish_reason = "consensus"
                 console.print(
                     f"\n[bold green]Everyone agrees at epoch {epoch} — stopping early.[/]"
                     f" Final position: {consensus_result.majority_position}"
@@ -196,6 +232,43 @@ async def run_simulation(
             f" '{consensus_result.majority_position}'; the dissenter was not silenced."
         )
 
+    # Post-run: LLM-judge every agent's position at every epoch into a boolean
+    # (holds_truth) — the authoritative conversion signal, per epoch. Skipped
+    # for contaminated runs (already invalid).
+    verdicts_by_epoch: list[dict] = []
+    if finish_reason != "contaminated":
+        # (epoch, agent_id, is_dissenter, position) for each positioned message.
+        items = []
+        for msg in transcript:
+            pos = extract_positions({0: msg.content}).get(0, "")
+            if pos:
+                items.append((msg.epoch, msg.agent_id, msg.is_dissenter, pos))
+        console.print("[dim]Judging positions per epoch…[/]")
+        try:
+            vmap = await judge_positions(
+                config.topic,
+                config.knowledge.dissenter,
+                [pos for *_, pos in items],
+                config.model.name,
+            )
+        except Exception as exc:  # noqa: BLE001 — fall back to keyword scoring
+            console.print(f"[dim]Conversion judge failed ({exc}); skipping verdicts.[/]")
+            vmap = {}
+        if vmap:
+            tk = config.scoring.truth_keywords
+            fk = config.scoring.false_keywords
+            for ep, aid, isd, pos in items:
+                holds = vmap[pos] if pos in vmap else (classify_stance(pos, tk, fk) == "truth")
+                verdicts_by_epoch.append(
+                    {
+                        "epoch": ep,
+                        "agent_id": aid,
+                        "is_dissenter": isd,
+                        "position": pos,
+                        "holds_truth": bool(holds),
+                    }
+                )
+
     return ExperimentResult(
         experiment_name=config.name,
         total_epochs=epoch,
@@ -204,4 +277,6 @@ async def run_simulation(
         transcript=transcript,
         config_snapshot=config.model_dump(),
         epoch_summaries=epoch_summaries,
+        finish_reason=finish_reason,
+        verdicts_by_epoch=verdicts_by_epoch,
     )

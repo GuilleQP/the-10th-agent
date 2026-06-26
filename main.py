@@ -125,5 +125,38 @@ def agg() -> None:
     aggregate_main()
 
 
+@app.command()
+def replay(
+    run_file: Annotated[
+        Optional[Path],
+        typer.Argument(
+            exists=True,
+            dir_okay=False,
+            help="A run *_chat.json. If omitted, the latest run matching the filters is used.",
+        ),
+    ] = None,
+    experiment: Annotated[
+        Optional[str],
+        typer.Option("--experiment", "-e", help="Pick the latest run whose path contains this."),
+    ] = None,
+    model: Annotated[
+        Optional[str],
+        typer.Option("--model", "-m", help="Restrict to a model name substring."),
+    ] = None,
+    structure: Annotated[
+        Optional[str],
+        typer.Option("--structure", "-s", help="Restrict to a structure (round-robin/random/free-for-all)."),
+    ] = None,
+    output: Annotated[
+        Path,
+        typer.Option("--output", "-o", help="Output HTML path."),
+    ] = Path("docs/room.html"),
+) -> None:
+    """Build an animated room replay (HTML) of a single run."""
+    from src.replay import main as replay_main
+
+    replay_main(run_file, experiment, model, structure, output)
+
+
 if __name__ == "__main__":
     app()

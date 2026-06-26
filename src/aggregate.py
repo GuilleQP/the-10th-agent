@@ -18,16 +18,25 @@ Scoring is deterministic and offline: a majority agent's final
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import yaml
 
+from src.charts import Series, color_for, legend_html, line_chart_svg
 from src.config import CATEGORY_LABELS, Category, load_config
+from src.scoring import classify_stance
 
 EXPERIMENTS_ROOT = Path("experiments")
 RESULTS_DIR = Path("docs")  # GitHub Pages serves from /docs on the main branch
+CHARTS_DIR = Path("charts")  # local per-model conversion-curve checks (gitignored)
 MODELS_REGISTRY = EXPERIMENTS_ROOT / "models.yaml"
+
+# X-axis horizon for conversion-over-epoch curves. All current configs cap at 5
+# epochs; shorter runs (e.g. early consensus) carry their last value forward,
+# and any stale longer run is truncated here.
+EPOCH_HORIZON = 5
 
 # conversion_rate thresholds → (bucket key, label, bg color, text color)
 # GitHub Primer "state label" palette: tinted background + colored text.
@@ -61,16 +70,50 @@ class RunScore:
     category: str
     model: str
     structure: str
+    finish_reason: str
     conversion_rate: float
     majority_count: int
     converted: int
     consensus_reached: bool
     dissenter_silenced: bool
+    # Per-epoch conversion fraction (carry-forward), length EPOCH_HORIZON. Only
+    # populated from LLM-judged verdicts_by_epoch; empty for keyword fallback.
+    epoch_curve: list[float] = field(default_factory=list)
+
+    @property
+    def valid(self) -> bool:
+        """Contaminated runs (prior-knowledge leak) don't count as results."""
+        return self.finish_reason != "contaminated"
 
 
-def _contains_any(text: str, keywords: list[str]) -> bool:
-    low = text.lower()
-    return any(kw.lower() in low for kw in keywords)
+def _epoch_curve(vbe: list[dict], dissenter_index: int, horizon: int) -> list[float]:
+    """Per-epoch majority conversion via carry-forward of each agent's verdict.
+
+    For epoch e, each majority agent contributes its latest verdict with
+    epoch <= e (False before it first speaks). A run that stopped early at 100%
+    consensus therefore stays at 100% through the horizon; non-speakers in a
+    given epoch keep their previous stance.
+    """
+    by_agent: dict[int, list[tuple[int, bool]]] = {}
+    for v in vbe:
+        aid = v.get("agent_id")
+        if aid == dissenter_index:
+            continue
+        by_agent.setdefault(aid, []).append((v.get("epoch", 0), bool(v.get("holds_truth"))))
+    if not by_agent:
+        return []
+    for hist in by_agent.values():
+        hist.sort()
+
+    curve: list[float] = []
+    for e in range(1, horizon + 1):
+        holding = 0
+        for hist in by_agent.values():
+            latest = [h for ep, h in hist if ep <= e]
+            if latest and latest[-1]:
+                holding += 1
+        curve.append(holding / len(by_agent))
+    return curve
 
 
 def score_run(data: dict) -> RunScore | None:
@@ -80,8 +123,54 @@ def score_run(data: dict) -> RunScore | None:
     truth_kw = scoring.get("truth_keywords", [])
     false_kw = scoring.get("false_keywords", [])
     dissenter_index = config.get("agents", {}).get("dissenter_index", 9)
+    finish_reason = data.get("finish_reason", "max_epochs")
+
+    common = dict(
+        experiment=data.get("experiment_name", "unknown"),
+        category=config.get("category", "uncategorized"),
+        model=config.get("model", {}).get("name", "unknown"),
+        structure=config.get("communication", {}).get("structure", CANONICAL_STRUCTURE),
+        finish_reason=finish_reason,
+    )
+
+    # A contaminated run is invalid — record it (so it's visible) but unscored.
+    if finish_reason == "contaminated":
+        return RunScore(
+            **common,
+            conversion_rate=0.0,
+            majority_count=0,
+            converted=0,
+            consensus_reached=False,
+            dissenter_silenced=False,
+        )
 
     consensus = data.get("consensus") or {}
+
+    # Preferred: LLM-judged per-epoch verdicts. Final conversion uses each
+    # majority agent's latest-epoch verdict.
+    vbe = data.get("verdicts_by_epoch")
+    if vbe:
+        final: dict[int, tuple[int, bool]] = {}
+        for v in vbe:
+            aid = v.get("agent_id")
+            if aid == dissenter_index:
+                continue
+            ep = v.get("epoch", 0)
+            if aid not in final or ep >= final[aid][0]:
+                final[aid] = (ep, bool(v.get("holds_truth")))
+        if final:
+            converted = sum(1 for _, holds in final.values() if holds)
+            return RunScore(
+                **common,
+                conversion_rate=converted / len(final),
+                majority_count=len(final),
+                converted=converted,
+                consensus_reached=bool(consensus.get("reached")),
+                dissenter_silenced=bool(consensus.get("dissenter_silenced")),
+                epoch_curve=_epoch_curve(vbe, dissenter_index, EPOCH_HORIZON),
+            )
+
+    # Legacy fallback: negation-aware keyword scoring on final positions.
     positions: dict[str, str] = consensus.get("positions", {})
     if not positions:
         return None
@@ -90,18 +179,14 @@ def score_run(data: dict) -> RunScore | None:
     if not majority:
         return None
 
-    converted = 0
-    for pos in majority.values():
-        if truth_kw and _contains_any(pos, truth_kw) and not _contains_any(pos, false_kw):
-            converted += 1
-    rate = converted / len(majority)
+    converted = sum(
+        1 for pos in majority.values()
+        if classify_stance(pos, truth_kw, false_kw) == "truth"
+    )
 
     return RunScore(
-        experiment=data.get("experiment_name", "unknown"),
-        category=config.get("category", "uncategorized"),
-        model=config.get("model", {}).get("name", "unknown"),
-        structure=config.get("communication", {}).get("structure", CANONICAL_STRUCTURE),
-        conversion_rate=rate,
+        **common,
+        conversion_rate=converted / len(majority),
         majority_count=len(majority),
         converted=converted,
         consensus_reached=bool(consensus.get("reached")),
@@ -175,8 +260,10 @@ class Aggregation:
 
     @property
     def canonical(self) -> list[RunScore]:
-        """Only the standard (round-robin) runs — used for headline metrics."""
-        return [s for s in self.scores if s.structure == CANONICAL_STRUCTURE]
+        """Standard (round-robin), valid runs — used for headline metrics."""
+        return [
+            s for s in self.scores if s.structure == CANONICAL_STRUCTURE and s.valid
+        ]
 
     def model_field_rate(self, model: str, category: str) -> float | None:
         vals = [
@@ -195,6 +282,22 @@ class Aggregation:
             if s.model == model and s.experiment == experiment and s.structure == structure:
                 return s
         return None
+
+    def model_curve(self, model: str) -> list[float]:
+        """Mean per-epoch conversion across this model's canonical runs."""
+        curves = [s.epoch_curve for s in self.canonical if s.model == model and s.epoch_curve]
+        if not curves:
+            return []
+        return [sum(c[e] for c in curves) / len(curves) for e in range(EPOCH_HORIZON)]
+
+    def model_experiment_curves(self, model: str) -> list[tuple[str, list[float]]]:
+        """(experiment, curve) for this model's canonical runs, sorted by name."""
+        out = [
+            (s.experiment, s.epoch_curve)
+            for s in self.canonical
+            if s.model == model and s.epoch_curve
+        ]
+        return sorted(out)
 
 
 def aggregate(scores: list[RunScore]) -> Aggregation:
@@ -266,20 +369,27 @@ def render_markdown(agg: Aggregation, meta: dict[str, dict]) -> str:
         lines.append(f"| {label(m)} | " + " | ".join(cells) + " |")
     lines.append("")
 
-    # Per-experiment detail (one row per experiment × structure)
-    lines += ["## Per-experiment detail (conversion rate)", ""]
+    # Per-experiment detail (round-robin runs only, like the leaderboard/heatmap)
+    lines += ["## Per-experiment detail (conversion rate, round-robin runs)", ""]
     detail_header = (
-        "| Field | Experiment | Structure | " + " | ".join(label(m) for m in ranked) + " |"
+        "| Field | Experiment | " + " | ".join(label(m) for m in ranked) + " |"
     )
-    detail_sep = "|---|---|---|" + "|".join(["---"] * len(ranked)) + "|"
+    detail_sep = "|---|---|" + "|".join(["---"] * len(ranked)) + "|"
     lines += [detail_header, detail_sep]
     for cat, exp, struct in agg.experiments:
+        if struct != CANONICAL_STRUCTURE:
+            continue
         cells = []
         for m in ranked:
             s = agg.cell(m, exp, struct)
-            cells.append("—" if s is None else f"{s.conversion_rate:.0%}")
+            if s is None:
+                cells.append("—")
+            elif not s.valid:
+                cells.append("invalid")
+            else:
+                cells.append(f"{s.conversion_rate:.0%}")
         lines.append(
-            f"| {_cat_label(cat)} | {exp} | {struct} | " + " | ".join(cells) + " |"
+            f"| {_cat_label(cat)} | {exp} | " + " | ".join(cells) + " |"
         )
     lines.append("")
 
@@ -343,22 +453,26 @@ def render_html(
         cells = "".join(cell(agg.model_field_rate(m, c)) for c in agg.categories)
         hm_rows += f'<tr><th class="{rowh_cls}">{label(m)}</th>{cells}</tr>'
 
-    # Detail rows (one per experiment × structure)
+    # Detail rows (round-robin runs only, like the leaderboard/heatmap)
     dt_head = "".join(f'<th class="{head_cls} text-center">{label(m)}</th>' for m in ranked)
     dt_rows = ""
     for cat, exp, struct in agg.experiments:
+        if struct != CANONICAL_STRUCTURE:
+            continue
         cells = ""
         for m in ranked:
             s = agg.cell(m, exp, struct)
-            cells += cell(s.conversion_rate if s else None)
-        struct_badge = (
-            f'<span class="inline-block rounded-full bg-[#eaeef2] px-2 py-0.5 text-xs '
-            f'text-[#57606a]">{struct}</span>'
-        )
+            if s and not s.valid:
+                cells += (
+                    f'<td class="{hm_cls}" style="background:#eaeef2;color:#8a8780" '
+                    'title="Invalid: a majority agent argued the truth in epoch 1 '
+                    'before the dissenter spoke (prior-knowledge leak).">invalid</td>'
+                )
+            else:
+                cells += cell(s.conversion_rate if s else None)
         dt_rows += (
             f'<tr><th class="{rowh_cls}">{_cat_label(cat)}</th>'
-            f'<td class="{base_cls}">{exp}</td>'
-            f'<td class="{base_cls}">{struct_badge}</td>{cells}</tr>'
+            f'<td class="{base_cls}">{exp}</td>{cells}</tr>'
         )
 
     legend = "".join(
@@ -366,6 +480,16 @@ def render_html(
         f'style="background:{bg};color:{fg};border-color:{fg}33">{lbl}</span>'
         for _, _, lbl, bg, fg in BUCKETS
     )
+
+    # Conversion-over-epochs: one averaged line per model (canonical runs).
+    x_labels = [str(e) for e in range(1, EPOCH_HORIZON + 1)]
+    curve_series = [
+        Series(label=label(m), color=color_for(i), points=agg.model_curve(m))
+        for i, m in enumerate(ranked)
+    ]
+    curve_series = [s for s in curve_series if s.points]
+    curve_svg = line_chart_svg(curve_series, x_labels)
+    curve_legend = legend_html(curve_series)
 
     # All tables fill the same fixed-width container, so they line up.
     box_cls = "w-full overflow-x-auto rounded-md border border-[#d0d7de]"
@@ -479,9 +603,15 @@ document.addEventListener('DOMContentLoaded', () => {{
     </div>
   </section>
   <section class="{section_cls}">
-    <h2 class="{h2_cls}">Per-experiment detail</h2>
+    <h2 class="{h2_cls}">Conversion over epochs <span class="text-xs font-normal text-[#8a8780]">(avg per model, round-robin runs)</span></h2>
+    <p class="text-sm text-[#656d76] mb-3">Share of the 9 majority agents holding the truth at the end of each epoch, averaged over every experiment. Shows <em>when</em> agents come around &mdash; a steep early rise means the dissenter broke the consensus fast; a flat line near 0 means it was silenced.</p>
+    <div class="mb-3">{curve_legend}</div>
+    <div class="{box_cls} p-4">{curve_svg}</div>
+  </section>
+  <section class="{section_cls}">
+    <h2 class="{h2_cls}">Per-experiment detail <span class="text-xs font-normal text-[#8a8780]">(round-robin runs)</span></h2>
     <div class="{box_cls}">
-      <table class="{table_cls}"><thead><tr><th class="{head_cls}">Field</th><th class="{head_cls}">Experiment</th><th class="{head_cls}">Structure</th>{dt_head}</tr></thead><tbody>{dt_rows}</tbody></table>
+      <table class="{table_cls}"><thead><tr><th class="{head_cls}">Field</th><th class="{head_cls}">Experiment</th>{dt_head}</tr></thead><tbody>{dt_rows}</tbody></table>
     </div>
   </section>
   {inspector}
@@ -489,6 +619,48 @@ document.addEventListener('DOMContentLoaded', () => {{
 {inspector_js}
 </body></html>
 """
+
+
+def render_model_curve_page(agg: Aggregation, model: str, model_label: str) -> str:
+    """Standalone HTML: one conversion line per experiment for a single model."""
+    x_labels = [str(e) for e in range(1, EPOCH_HORIZON + 1)]
+    series = [
+        Series(label=exp, color=color_for(i), points=curve)
+        for i, (exp, curve) in enumerate(agg.model_experiment_curves(model))
+    ]
+    svg = line_chart_svg(series, x_labels, width=820, height=420)
+    legend = legend_html(series)
+    return f"""<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Conversion over epochs — {model_label}</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<style>body{{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}}</style>
+</head>
+<body class="bg-white text-[#1f2328] antialiased">
+<main class="max-w-4xl mx-auto px-6 py-8">
+  <h1 class="text-xl font-semibold mb-1">Conversion over epochs &mdash; {model_label}</h1>
+  <p class="text-sm text-[#656d76] mb-4">Share of the 9 majority agents holding the truth at the end of each epoch. One line per experiment (round-robin runs).</p>
+  <div class="mb-3">{legend}</div>
+  <div class="rounded-md border border-[#d0d7de] p-4">{svg}</div>
+</main>
+</body></html>
+"""
+
+
+def write_model_curve_pages(agg: Aggregation, meta: dict[str, dict], out_dir: Path) -> list[Path]:
+    """Write one local per-model conversion-curve page; return the paths."""
+    out_dir.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for m in agg.models:
+        if not agg.model_experiment_curves(m):
+            continue
+        label = meta.get(m, {}).get("label", m)
+        slug = re.sub(r"[^a-z0-9]+", "-", m.lower()).strip("-")
+        path = out_dir / f"{slug}_epochs.html"
+        path.write_text(render_model_curve_page(agg, m, label))
+        written.append(path)
+    return written
 
 
 def main(root: Path = EXPERIMENTS_ROOT, out_dir: Path = RESULTS_DIR) -> None:
@@ -503,8 +675,10 @@ def main(root: Path = EXPERIMENTS_ROOT, out_dir: Path = RESULTS_DIR) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "leaderboard.md").write_text(render_markdown(agg, meta))
     (out_dir / "index.html").write_text(render_html(agg, meta, experiments))
+    curve_pages = write_model_curve_pages(agg, meta, CHARTS_DIR)
     print(
         f"Aggregated {len(scores)} runs "
         f"({len(agg.models)} models × {len(agg.experiments)} experiments).\n"
-        f"  → {out_dir / 'leaderboard.md'}\n  → {out_dir / 'index.html'}"
+        f"  → {out_dir / 'leaderboard.md'}\n  → {out_dir / 'index.html'}\n"
+        f"  → {len(curve_pages)} per-model conversion-curve pages in {CHARTS_DIR}/"
     )

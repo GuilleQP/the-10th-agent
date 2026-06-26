@@ -45,8 +45,8 @@ Each experiment consists of:
 
 ### Communication Structures
 
-- **Round-robin**: Agents speak in fixed order each epoch
-- **Random**: Speaking order is shuffled each epoch
+- **Round-robin**: Every agent speaks once per epoch in fixed order (the dissenter speaks last)
+- **Random**: Every agent speaks once per epoch, in a freshly shuffled order each epoch
 - **Free-for-all**: Random subset (at least half) speaks each epoch — the dissenter is always included so it can't be silenced by chance
 
 ### Epoch Context
@@ -93,19 +93,52 @@ experiments/
 
 In every experiment, 9 majority agents share the **wrong** belief and 1 locked dissenter
 holds the **ground truth**. Each experiment config declares its `category` (field) and a
-`scoring` block of `truth_keywords`/`false_keywords` used to score outcomes offline.
+`scoring` block of `truth_keywords`/`false_keywords` (a legacy fallback; see below).
 
 ## Metric
 
 The headline metric is the **truth-conversion rate**: the fraction of the 9 majority
 agents that adopted the dissenter's correct position by the end of the discussion.
 
+Conversion is measured by an **LLM judge** (`src/judge.py`): after each run, the judge
+reads every agent's final position against the ground truth and records a per-agent
+boolean (`holds_truth`) into the run JSON (`agent_verdicts`). The aggregator scores from
+those booleans. Keyword matching (`src/scoring.py`, negation-aware) is only a fallback for
+older runs that have no recorded verdicts — it's brittle around negations and shared
+vocabulary, which is exactly why the LLM judge is authoritative.
+
 - **High** → the majority resisted the spiral of silence and moved toward truth.
 - **0.0** → the dissenter was fully silenced; the majority never budged.
 
 ## Key Findings
 
-*To be updated after running experiments.*
+### Prior-knowledge contamination: some models won't hold a false belief
+
+The first thing the experiments surfaced is **methodological**: when assigned a
+belief they "know" to be false, some models refuse to genuinely play the role and
+instead argue the *correct* answer right away — sometimes in **epoch 1, before the
+dissenter has even spoken**. Since no one has introduced the true position yet,
+this can only come from the model's training knowledge leaking through, not from
+the assigned belief or any in-chat argument.
+
+This breaks the premise of the experiment (a majority that genuinely holds the
+wrong view), so a run is **invalidated** when a majority agent reaches the truth
+position before the dissenter speaks in epoch 1. Such runs are tagged
+`finish_reason: contaminated`, excluded from the leaderboard and heatmap, and shown
+as `invalid` in the per-experiment detail table rather than silently scored.
+
+Two takeaways:
+
+- **It's a real obstacle to belief-dynamics simulations.** You can't study how a
+  group reacts to a false consensus if the "believers" won't hold the false view.
+  Tightening the system prompt ("you have no knowledge beyond this chat") reduces
+  it but does not eliminate it — strong factual priors (e.g. the shape of the
+  Earth) leak more than subtle ones (e.g. `0.999… = 1`).
+- **It's a signal in itself** — how readily a model abandons an assigned-but-false
+  premise is a crude proxy for how strongly it anchors on ground truth versus
+  instructions. Contamination rates per model/topic populate as runs are
+  re-collected under this check.
+
 
 ## Usage
 
@@ -150,9 +183,10 @@ fetching beyond the Tailwind CDN), so it can be served directly via **GitHub Pag
 ## Adding an experiment
 
 Drop a `config.yaml` into the appropriate `experiments/<field>/<name>/` folder. Set its
-`category`, the `knowledge.common` (wrong) and `knowledge.dissenter` (true) beliefs, and a
-`scoring` block so the aggregator can detect conversion. It is picked up automatically by
-`bench` and `agg`.
+`category` and the `knowledge.common` (wrong) and `knowledge.dissenter` (true) beliefs —
+the LLM judge uses `knowledge.dissenter` as the ground truth. A `scoring` block of
+`truth_keywords`/`false_keywords` is optional (only used as the legacy keyword fallback).
+It is picked up automatically by `bench` and `agg`.
 
 ## Discussion
 

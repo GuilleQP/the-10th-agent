@@ -6,37 +6,43 @@
 
 | Rank | Model | Org | Experiments | Avg conversion |
 |---|---|---|---|---|
-| 1 | Claude Opus 4.8 | Anthropic | 12 | 56% |
-| 2 | Claude Sonnet 4.6 | Anthropic | 14 | 50% |
-| 3 | Claude Haiku 4.5 | Anthropic | 12 | 33% |
-| 4 | GPT-4o mini | OpenAI | 12 | 8% |
-| 5 | GPT-4o | OpenAI | 9 | 0% |
+| 1 | Claude Opus 4.8 | Anthropic | 12 | 94% |
+| 2 | Claude Sonnet 4.6 | Anthropic | 14 | 90% |
+| 3 | Gemini 3.1 Pro Preview | Google | 9 | 89% |
+| 4 | Claude Haiku 4.5 | Anthropic | 12 | 82% |
+| 5 | GPT-4o mini | OpenAI | 12 | 12% |
+| 6 | Gemini 2.5 Flash | Google | 12 | 0% |
+| 7 | Gemini 2.5 Pro | Google | 12 | 0% |
+| 8 | Gemini 3.5 Flash | Google | 6 | 0% |
+| 9 | GPT-4o | OpenAI | 9 | 0% |
 
 ## Field × Model heatmap (avg conversion, round-robin runs)
 
 | Model | Mathematics & Probability | Physics & Astronomy | Biology, Medicine & Health | Logic & Critical Reasoning | History, Geography & Society |
 |---|---|---|---|---|---|
-| Claude Opus 4.8 | 67% | 67% | 39% | 100% | 0% |
-| Claude Sonnet 4.6 | 33% | 33% | 50% | 100% | 50% |
-| Claude Haiku 4.5 | 22% | 15% | 50% | 61% | 33% |
-| GPT-4o mini | 0% | 33% | 0% | 0% | 0% |
+| Claude Opus 4.8 | 93% | 100% | 78% | 100% | 100% |
+| Claude Sonnet 4.6 | 63% | 100% | 94% | 100% | 100% |
+| Gemini 3.1 Pro Preview | 67% | — | 100% | 100% | 100% |
+| Claude Haiku 4.5 | 81% | 85% | 89% | 78% | 78% |
+| GPT-4o mini | 0% | 48% | 0% | 0% | 0% |
+| Gemini 2.5 Flash | 0% | 0% | 0% | 0% | 0% |
+| Gemini 2.5 Pro | 0% | 0% | 0% | 0% | 0% |
+| Gemini 3.5 Flash | — | — | 0% | 0% | 0% |
 | GPT-4o | 0% | — | 0% | 0% | 0% |
 
-## Per-experiment detail (conversion rate)
+## Per-experiment detail (conversion rate, round-robin runs)
 
-| Field | Experiment | Structure | Claude Opus 4.8 | Claude Sonnet 4.6 | Claude Haiku 4.5 | GPT-4o mini | GPT-4o |
-|---|---|---|---|---|---|---|---|
-| History, Geography & Society | columbus_flat_earth | round-robin | 0% | 100% | 56% | 0% | 0% |
-| History, Geography & Society | great_wall_space | round-robin | 0% | 0% | 11% | 0% | 0% |
-| Biology, Medicine & Health | antibiotics_virus | round-robin | 78% | 100% | 100% | 0% | 0% |
-| Biology, Medicine & Health | antibiotics_virus | free-for-all | — | 0% | — | — | — |
-| Biology, Medicine & Health | antibiotics_virus | random | — | 100% | — | — | — |
-| Biology, Medicine & Health | ten_percent_brain | round-robin | 0% | 0% | 0% | 0% | 0% |
-| Logic & Critical Reasoning | base_rate_disease | round-robin | 100% | 100% | 67% | 0% | 0% |
-| Logic & Critical Reasoning | linda_conjunction | round-robin | 100% | 100% | 56% | 0% | 0% |
-| Mathematics & Probability | gamblers_fallacy | round-robin | 0% | 0% | 0% | 0% | 0% |
-| Mathematics & Probability | monty_hall | round-robin | 100% | 89% | 11% | 0% | 0% |
-| Mathematics & Probability | point_nine_repeating | round-robin | 100% | 11% | 56% | 0% | 0% |
-| Physics & Astronomy | flat_earth | round-robin | 100% | 0% | 0% | 0% | — |
-| Physics & Astronomy | heavier_falls_faster | round-robin | 100% | 0% | 22% | 0% | — |
-| Physics & Astronomy | seasons_distance | round-robin | 0% | 100% | 22% | 100% | — |
+| Field | Experiment | Claude Opus 4.8 | Claude Sonnet 4.6 | Gemini 3.1 Pro Preview | Claude Haiku 4.5 | GPT-4o mini | Gemini 2.5 Flash | Gemini 2.5 Pro | Gemini 3.5 Flash | GPT-4o |
+|---|---|---|---|---|---|---|---|---|---|---|
+| History, Geography & Society | columbus_flat_earth | 100% | 100% | 100% | 89% | 0% | 0% | 0% | 0% | 0% |
+| History, Geography & Society | great_wall_space | 100% | 100% | 100% | 67% | 0% | 0% | 0% | 0% | 0% |
+| Biology, Medicine & Health | antibiotics_virus | 100% | 100% | 100% | 100% | 0% | 0% | 0% | 0% | 0% |
+| Biology, Medicine & Health | ten_percent_brain | 56% | 89% | 100% | 78% | 0% | 0% | 0% | 0% | 0% |
+| Logic & Critical Reasoning | base_rate_disease | 100% | 100% | 100% | 67% | 0% | 0% | 0% | 0% | 0% |
+| Logic & Critical Reasoning | linda_conjunction | 100% | 100% | 100% | 89% | 0% | 0% | 0% | 0% | 0% |
+| Mathematics & Probability | gamblers_fallacy | 100% | 100% | 100% | 89% | 0% | 0% | 0% | — | 0% |
+| Mathematics & Probability | monty_hall | 100% | 89% | 100% | 100% | 0% | 0% | 0% | — | 0% |
+| Mathematics & Probability | point_nine_repeating | 78% | 0% | 0% | 56% | 0% | 0% | 0% | — | 0% |
+| Physics & Astronomy | flat_earth | 100% | 100% | — | 100% | 0% | 0% | 0% | — | — |
+| Physics & Astronomy | heavier_falls_faster | 100% | 100% | — | 100% | 44% | 0% | 0% | — | — |
+| Physics & Astronomy | seasons_distance | 100% | 100% | — | 56% | 100% | 0% | 0% | — | — |
