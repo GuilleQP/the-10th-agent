@@ -385,7 +385,7 @@ def render_markdown(agg: Aggregation, meta: dict[str, dict]) -> str:
             if s is None:
                 cells.append("—")
             elif not s.valid:
-                cells.append("invalid")
+                cells.append("contaminated")
             else:
                 cells.append(f"{s.conversion_rate:.0%}")
         lines.append(
@@ -465,8 +465,8 @@ def render_html(
             if s and not s.valid:
                 cells += (
                     f'<td class="{hm_cls}" style="background:#eaeef2;color:#8a8780" '
-                    'title="Invalid: a majority agent argued the truth in epoch 1 '
-                    'before the dissenter spoke (prior-knowledge leak).">invalid</td>'
+                    'title="Contaminated: a majority agent argued the truth in epoch 1 '
+                    'before the dissenter spoke (prior-knowledge leak).">contaminated</td>'
                 )
             else:
                 cells += cell(s.conversion_rate if s else None)
@@ -610,6 +610,7 @@ document.addEventListener('DOMContentLoaded', () => {{
   </section>
   <section class="{section_cls}">
     <h2 class="{h2_cls}">Per-experiment detail <span class="text-xs font-normal text-[#8a8780]">(round-robin runs)</span></h2>
+    <p class="text-sm text-[#656d76] mb-3"><span class="inline-block rounded-full bg-[#eaeef2] px-2 py-0.5 text-xs font-medium text-[#8a8780] mr-1">contaminated</span> the run was discarded &mdash; a majority agent argued the truth in epoch&nbsp;1 before the dissenter spoke, leaking prior knowledge instead of holding its assigned false belief.</p>
     <div class="{box_cls}">
       <table class="{table_cls}"><thead><tr><th class="{head_cls}">Field</th><th class="{head_cls}">Experiment</th>{dt_head}</tr></thead><tbody>{dt_rows}</tbody></table>
     </div>
