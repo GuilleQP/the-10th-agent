@@ -63,6 +63,10 @@ def bucket_for(rate: float) -> tuple[str, str, str, str]:
 # structure experiments don't skew the headline model comparison.
 CANONICAL_STRUCTURE = "round-robin"
 
+# Group-size sweep runs live here; they reuse an experiment's name but vary the
+# agent count, so they must NOT feed the field × model leaderboard/heatmap.
+GROUP_SIZE_DIRNAME = "group_size"
+
 
 @dataclass
 class RunScore:
@@ -86,7 +90,9 @@ class RunScore:
         return self.finish_reason != "contaminated"
 
 
-def _epoch_curve(vbe: list[dict], dissenter_index: int, horizon: int) -> list[float]:
+def _epoch_curve(
+    vbe: list[dict], dissenter_index: int, horizon: int, precommitted: set | None = None
+) -> list[float]:
     """Per-epoch majority conversion via carry-forward of each agent's verdict.
 
     For epoch e, each majority agent contributes its latest verdict with
@@ -94,10 +100,11 @@ def _epoch_curve(vbe: list[dict], dissenter_index: int, horizon: int) -> list[fl
     consensus therefore stays at 100% through the horizon; non-speakers in a
     given epoch keep their previous stance.
     """
+    precommitted = precommitted or set()
     by_agent: dict[int, list[tuple[int, bool]]] = {}
     for v in vbe:
         aid = v.get("agent_id")
-        if aid == dissenter_index:
+        if aid == dissenter_index or aid in precommitted:
             continue
         by_agent.setdefault(aid, []).append((v.get("epoch", 0), bool(v.get("holds_truth"))))
     if not by_agent:
@@ -146,6 +153,11 @@ def score_run(data: dict) -> RunScore | None:
 
     consensus = data.get("consensus") or {}
 
+    # Agents that leaked the truth in epoch 1 before the dissenter spoke never
+    # held the false belief, so they're not part of the population the spiral
+    # acts on — drop them from the denominator (EXCLUDE policy).
+    precommitted = set(data.get("precommitted_agents", []))
+
     # Preferred: LLM-judged per-epoch verdicts. Final conversion uses each
     # majority agent's latest-epoch verdict.
     vbe = data.get("verdicts_by_epoch")
@@ -153,7 +165,7 @@ def score_run(data: dict) -> RunScore | None:
         final: dict[int, tuple[int, bool]] = {}
         for v in vbe:
             aid = v.get("agent_id")
-            if aid == dissenter_index:
+            if aid == dissenter_index or aid in precommitted:
                 continue
             ep = v.get("epoch", 0)
             if aid not in final or ep >= final[aid][0]:
@@ -167,7 +179,7 @@ def score_run(data: dict) -> RunScore | None:
                 converted=converted,
                 consensus_reached=bool(consensus.get("reached")),
                 dissenter_silenced=bool(consensus.get("dissenter_silenced")),
-                epoch_curve=_epoch_curve(vbe, dissenter_index, EPOCH_HORIZON),
+                epoch_curve=_epoch_curve(vbe, dissenter_index, EPOCH_HORIZON, precommitted),
             )
 
     # Legacy fallback: negation-aware keyword scoring on final positions.
@@ -202,6 +214,8 @@ def collect_latest_scores(root: Path = EXPERIMENTS_ROOT) -> list[RunScore]:
     """
     latest: dict[tuple[str, str, str], RunScore] = {}
     for path in sorted(root.rglob("*_chat.json")):
+        if GROUP_SIZE_DIRNAME in path.parts:
+            continue
         try:
             data = json.loads(path.read_text())
         except (json.JSONDecodeError, OSError):
@@ -228,6 +242,8 @@ def collect_experiments(root: Path = EXPERIMENTS_ROOT) -> list[dict]:
     """Load every experiment config's metadata + starting knowledge."""
     out: list[dict] = []
     for path in sorted(root.rglob("config.yaml")):
+        if GROUP_SIZE_DIRNAME in path.parts:
+            continue
         try:
             c = load_config(path)
         except Exception:  # noqa: BLE001 — skip malformed configs
@@ -677,6 +693,14 @@ def main(root: Path = EXPERIMENTS_ROOT, out_dir: Path = RESULTS_DIR) -> None:
     (out_dir / "leaderboard.md").write_text(render_markdown(agg, meta))
     (out_dir / "index.html").write_text(render_html(agg, meta, experiments))
     curve_pages = write_model_curve_pages(agg, meta, CHARTS_DIR)
+
+    # Group-size study (if any sweeps have been run) — kept on its own page.
+    from src.groupsize import write_group_size_page
+
+    gs_page = write_group_size_page(out_dir)
+    if gs_page:
+        print(f"  → {gs_page}")
+
     print(
         f"Aggregated {len(scores)} runs "
         f"({len(agg.models)} models × {len(agg.experiments)} experiments).\n"

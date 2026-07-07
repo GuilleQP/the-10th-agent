@@ -19,6 +19,22 @@ class ConsensusMethod(str, Enum):
     UNANIMOUS = "unanimous"
 
 
+class ContaminationPolicy(str, Enum):
+    """What to do when a majority agent argues the truth in epoch 1 before the
+    dissenter speaks (a prior-knowledge leak — it never held the false belief).
+
+    - ABORT: discard the whole run (default; keeps the main benchmark pristine).
+    - EXCLUDE: keep the run but drop those pre-committed agents from the
+      conversion denominator (used by the group-size sweep, where a single
+      early-breaker shouldn't invalidate the other N-1 genuine believers).
+    - OFF: no detection.
+    """
+
+    ABORT = "abort"
+    EXCLUDE = "exclude"
+    OFF = "off"
+
+
 class Category(str, Enum):
     """Field/domain an experiment belongs to (mirrors a benchmark domain group)."""
 
@@ -92,6 +108,7 @@ class ExperimentConfig(BaseModel):
     communication: CommunicationConfig = Field(default_factory=CommunicationConfig)
     consensus: ConsensusConfig = Field(default_factory=ConsensusConfig)
     model: ModelConfig = Field(default_factory=ModelConfig)
+    contamination_policy: ContaminationPolicy = ContaminationPolicy.ABORT
 
 
 def load_config(path: str | Path) -> ExperimentConfig:

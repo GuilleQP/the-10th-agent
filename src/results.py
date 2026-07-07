@@ -34,12 +34,18 @@ class ExperimentResult:
     # LLM verdict per agent per epoch:
     # {"epoch", "agent_id", "is_dissenter", "position", "holds_truth"}.
     verdicts_by_epoch: list[dict] = field(default_factory=list)
+    # Majority agents that argued the truth in epoch 1 before the dissenter
+    # spoke (prior-knowledge leak). Under the EXCLUDE policy these are dropped
+    # from the conversion denominator; empty otherwise.
+    precommitted_agents: list[int] = field(default_factory=list)
 
-    def save(self, experiment_dir: str | Path) -> Path:
+    def save(self, experiment_dir: str | Path, name_suffix: str = "") -> Path:
         """Save results to the experiment's runs/ directory.
 
         Filenames embed a model slug so a matrix run (one experiment across
         many models) doesn't collide and the aggregator can group by model.
+        ``name_suffix`` appends an extra tag to the stem (e.g. ``n16_r1`` for a
+        group-size sweep) so those runs don't collide either.
         """
         runs_dir = Path(experiment_dir) / "runs"
         runs_dir.mkdir(parents=True, exist_ok=True)
@@ -52,6 +58,8 @@ class ExperimentResult:
         )
         struct_slug = re.sub(r"[^a-z0-9]+", "-", structure.lower()).strip("-")
         stem = f"{timestamp}_{model_slug}_{struct_slug}"
+        if name_suffix:
+            stem = f"{stem}_{name_suffix}"
 
         # Save full transcript as JSON
         chat_path = runs_dir / f"{stem}_chat.json"
@@ -62,6 +70,7 @@ class ExperimentResult:
             "consensus": _consensus_to_dict(self.consensus) if self.consensus else None,
             "dissenter_positions": self.dissenter_positions,
             "verdicts_by_epoch": self.verdicts_by_epoch,
+            "precommitted_agents": self.precommitted_agents,
             "epoch_summaries": self.epoch_summaries,
             "transcript": [asdict(m) for m in self.transcript],
             "config": self.config_snapshot,

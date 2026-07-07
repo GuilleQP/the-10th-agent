@@ -24,8 +24,9 @@ def color_for(i: int) -> str:
 class Series:
     label: str
     color: str
-    # One value in [0, 1] per epoch (x position). May be shorter than x_labels.
-    points: list[float]
+    # One value in [0, 1] per x position (aligned to x_labels). ``None`` leaves
+    # a gap (e.g. an N that a sweep skipped); may be shorter than x_labels.
+    points: list[float | None]
 
 
 def line_chart_svg(
@@ -35,8 +36,13 @@ def line_chart_svg(
     width: int = 720,
     height: int = 360,
     y_label: str = "Majority holding truth",
+    x_title: str = "Epoch",
 ) -> str:
-    """Render a multi-line chart (y = 0–100%, x = epochs) as an inline ``<svg>``."""
+    """Render a multi-line chart (y = 0–100%) as an inline ``<svg>``.
+
+    x positions are categorical and evenly spaced, so powers-of-two labels
+    (1, 2, 4, 8, 16) read as a log axis for free.
+    """
     ml, mr, mt, mb = 52, 18, 16, 40
     pw = width - ml - mr
     ph = height - mt - mb
@@ -75,7 +81,7 @@ def line_chart_svg(
         )
     parts.append(
         f'<text x="{ml + pw / 2:.1f}" y="{height - 4}" text-anchor="middle" '
-        f'font-size="11" fill="#656d76">Epoch</text>'
+        f'font-size="11" fill="#656d76">{x_title}</text>'
     )
     # Y axis title (rotated).
     parts.append(
@@ -83,20 +89,35 @@ def line_chart_svg(
         f'text-anchor="middle" font-size="11" fill="#656d76">{y_label}</text>'
     )
 
-    # One polyline (+ dots) per series.
+    # One polyline (+ dots) per series; split into segments across None gaps.
     for s in series:
         if not s.points:
             continue
-        pts = " ".join(f"{x_at(i):.1f},{y_at(v):.1f}" for i, v in enumerate(s.points))
-        parts.append(
-            f'<polyline fill="none" stroke="{s.color}" stroke-width="2" '
-            f'stroke-linejoin="round" stroke-linecap="round" points="{pts}"/>'
-        )
+        segment: list[str] = []
         for i, v in enumerate(s.points):
+            if v is None:
+                if len(segment) > 1:
+                    parts.append(
+                        f'<polyline fill="none" stroke="{s.color}" stroke-width="2" '
+                        f'stroke-linejoin="round" stroke-linecap="round" '
+                        f'points="{" ".join(segment)}"/>'
+                    )
+                segment = []
+                continue
+            segment.append(f"{x_at(i):.1f},{y_at(v):.1f}")
+        if len(segment) > 1:
+            parts.append(
+                f'<polyline fill="none" stroke="{s.color}" stroke-width="2" '
+                f'stroke-linejoin="round" stroke-linecap="round" '
+                f'points="{" ".join(segment)}"/>'
+            )
+        for i, v in enumerate(s.points):
+            if v is None:
+                continue
+            xlbl = x_labels[i] if i < len(x_labels) else i + 1
             parts.append(
                 f'<circle cx="{x_at(i):.1f}" cy="{y_at(v):.1f}" r="2.5" '
-                f'fill="{s.color}"><title>{s.label} · {x_labels[i] if i < len(x_labels) else i + 1}: '
-                f'{v:.0%}</title></circle>'
+                f'fill="{s.color}"><title>{s.label} · {xlbl}: {v:.0%}</title></circle>'
             )
 
     parts.append("</svg>")

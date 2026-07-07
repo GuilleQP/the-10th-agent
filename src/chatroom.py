@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.text import Text
 
-from src.config import CommunicationStructure, ExperimentConfig
+from src.config import CommunicationStructure, ContaminationPolicy, ExperimentConfig
 from src.consensus import ConsensusResult, check_consensus, extract_positions
 from src.judge import judge_positions
 from src.results import ChatMessage, ExperimentResult
@@ -119,10 +119,14 @@ async def run_simulation(
     finish_reason = "max_epochs"
     # Contamination check (epoch 1): a majority agent arguing the truth before
     # the dissenter speaks is leaking training knowledge, not role-playing.
+    # ABORT discards the whole run; EXCLUDE keeps it but records the leakers
+    # (dropped from the conversion denominator later); OFF disables the check.
+    policy = config.contamination_policy
     truth_kw = config.scoring.truth_keywords
     false_kw = config.scoring.false_keywords
     dissenter_spoke = False
     contaminated_agent: int | None = None
+    precommitted_agents: list[int] = []
 
     console.print(f"\n[bold green]Starting experiment:[/] {config.name}")
     console.print(f"[dim]{config.description}[/]\n")
@@ -159,13 +163,20 @@ async def run_simulation(
             _print_message(msg, config.agents.dissenter_index, config.name)
 
             # Epoch 1: flag a majority agent that argues the truth before the
-            # dissenter has spoken (prior-knowledge leak → invalid run).
-            if epoch == 1 and contaminated_agent is None and truth_kw:
+            # dissenter has spoken (prior-knowledge leak).
+            if (
+                epoch == 1
+                and policy != ContaminationPolicy.OFF
+                and contaminated_agent is None
+                and truth_kw
+            ):
                 if is_dissenter:
                     dissenter_spoke = True
                 elif not dissenter_spoke and _stance(content, truth_kw, false_kw) == "truth":
-                    contaminated_agent = agent_id
-                    break
+                    precommitted_agents.append(agent_id)
+                    if policy == ContaminationPolicy.ABORT:
+                        contaminated_agent = agent_id
+                        break
 
         if contaminated_agent is not None:
             finish_reason = "contaminated"
@@ -232,6 +243,13 @@ async def run_simulation(
             f" '{consensus_result.majority_position}'; the dissenter was not silenced."
         )
 
+    if policy == ContaminationPolicy.EXCLUDE and precommitted_agents:
+        console.print(
+            f"\n[yellow]Excluded {len(precommitted_agents)} pre-committed agent(s) "
+            f"{precommitted_agents} — argued the truth in epoch 1 before the dissenter "
+            "spoke, so they never held the false belief. Dropped from the denominator.[/]"
+        )
+
     # Post-run: LLM-judge every agent's position at every epoch into a boolean
     # (holds_truth) — the authoritative conversion signal, per epoch. Skipped
     # for contaminated runs (already invalid).
@@ -279,4 +297,5 @@ async def run_simulation(
         epoch_summaries=epoch_summaries,
         finish_reason=finish_reason,
         verdicts_by_epoch=verdicts_by_epoch,
+        precommitted_agents=precommitted_agents,
     )

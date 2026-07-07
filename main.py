@@ -126,6 +126,51 @@ def agg() -> None:
 
 
 @app.command()
+def groupsize(
+    experiment: Annotated[
+        str,
+        typer.Option("--experiment", "-e", help="Experiment path substring to sweep."),
+    ] = "linda_conjunction",
+    model: Annotated[
+        str,
+        typer.Option("--model", "-m", help="Model name to run the sweep with."),
+    ] = "anthropic:claude-haiku-4-5",
+    counts: Annotated[
+        str,
+        typer.Option("--counts", "-n", help="Comma-separated majority sizes, high→low."),
+    ] = "16,8,4,2,1",
+    repeats: Annotated[
+        int,
+        typer.Option("--repeats", "-r", help="Runs per N, averaged."),
+    ] = 2,
+    structure: Annotated[
+        Optional[CommunicationStructure],
+        typer.Option("--structure", "-s", help="Override the communication structure."),
+    ] = None,
+    early_stop: Annotated[
+        bool,
+        typer.Option(
+            "--early-stop/--no-early-stop",
+            "-x",
+            help="Stop the whole sweep once a size reaches 100% conversion.",
+        ),
+    ] = False,
+) -> None:
+    """Sweep majority size (N) for one experiment × model and plot conversion vs N."""
+    from src.groupsize import main as groupsize_main
+
+    n_list = [int(x) for x in counts.split(",") if x.strip()]
+    groupsize_main(
+        experiment=experiment,
+        model_name=model,
+        counts=n_list,
+        repeats=repeats,
+        structure=structure,
+        early_stop=early_stop,
+    )
+
+
+@app.command()
 def replay(
     run_file: Annotated[
         Optional[Path],
