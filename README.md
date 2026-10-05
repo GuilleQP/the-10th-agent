@@ -210,6 +210,11 @@ fetching beyond the Tailwind CDN), so it can be served directly via **GitHub Pag
 (Settings → Pages → Deploy from a branch → `main` / `/docs`) at
 `https://<user>.github.io/the-10th-agent/`. Re-run `agg` and commit `docs/` to refresh it.
 
+### Run it in n8n
+
+The chatroom also exists as a single n8n workflow with a form for new cases and a results
+page at the end. See [`n8n/`](n8n/README.md) for how to import it.
+
 ## Adding an experiment
 
 Drop a `config.yaml` into the appropriate `experiments/<field>/<name>/` folder. Set its

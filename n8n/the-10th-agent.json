@@ -1,0 +1,695 @@
+{
+  "name": "The 10th Agent: Spiral of Silence chatroom",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "The 10th Agent",
+        "formDescription": "Define a case: a question, the wrong belief the majority holds, and the ground truth only the last agent knows. The room debates for a few epochs and you get a report on whether the truth spread or was silenced. Pre-filled with Monty Hall; just press Run.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Question under debate",
+              "fieldName": "topic",
+              "fieldType": "text",
+              "requiredField": true,
+              "defaultValue": "In the Monty Hall problem, should you switch doors or stay with your original choice?"
+            },
+            {
+              "fieldLabel": "What the majority believes (wrong)",
+              "fieldName": "common",
+              "fieldType": "textarea",
+              "requiredField": true,
+              "defaultValue": "You believe that in the Monty Hall problem, it doesn't matter whether you switch or stay: both doors have a 50/50 chance. Your intuition says the initial choice is just as good."
+            },
+            {
+              "fieldLabel": "What the dissenter knows (ground truth)",
+              "fieldName": "truth",
+              "fieldType": "textarea",
+              "requiredField": true,
+              "defaultValue": "You have studied probability theory and know that switching doors gives a 2/3 chance of winning, while staying gives only 1/3. You can prove this with Bayes' theorem, simulation results, and the fact that the host's reveal provides new information."
+            },
+            {
+              "fieldLabel": "Agents in the room (3-12, the last one is the dissenter)",
+              "fieldName": "agents",
+              "fieldType": "number",
+              "requiredField": true,
+              "defaultValue": "10"
+            },
+            {
+              "fieldLabel": "Max epochs (1-10)",
+              "fieldName": "epochs",
+              "fieldType": "number",
+              "requiredField": true,
+              "defaultValue": "3"
+            },
+            {
+              "fieldLabel": "Speaking order",
+              "fieldName": "structure",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "round-robin",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "round-robin"
+                  },
+                  {
+                    "option": "random"
+                  },
+                  {
+                    "option": "free-for-all"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Model",
+              "fieldName": "model",
+              "fieldType": "dropdown",
+              "requiredField": true,
+              "defaultValue": "gpt-4o-mini",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "gpt-4o-mini"
+                  },
+                  {
+                    "option": "gpt-4.1-mini"
+                  },
+                  {
+                    "option": "gpt-4o"
+                  },
+                  {
+                    "option": "gpt-4.1"
+                  }
+                ]
+              }
+            }
+          ]
+        },
+        "responseMode": "lastNode",
+        "options": {
+          "buttonLabel": "Run the room",
+          "appendAttribution": false
+        }
+      },
+      "id": "c2706472-5efe-5a77-af05-326e4b10c8d3",
+      "name": "New eval case",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -260,
+        380
+      ],
+      "webhookId": "84525c9b-7a21-5f50-ac78-2364013685dc"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Port of src/agents.py + src/chatroom.py::_speaking_order.\n// Builds one persona per agent and every epoch's speaking order up front, then\n// starts the state object that travels through the loop.\nconst f = $input.first().json;\nconst int = (v, lo, hi, d) => {\n  const x = parseInt(v, 10);\n  return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d;\n};\n// System prompts go through LangChain templates, where braces are variables.\nconst clean = (v) => String(v ?? '').trim().replace(/\\{/g, '(').replace(/\\}/g, ')');\n\nconst n = int(f.agents, 3, 12, 10);\nconst run = {\n  topic: clean(f.topic),\n  common: clean(f.common),\n  truth: clean(f.truth),\n  n,\n  dissenterIndex: n - 1,\n  maxEpochs: int(f.epochs, 1, 10, 3),\n  structure: f.structure || 'round-robin',\n  model: f.model || 'gpt-4o-mini',\n  summarize: true,\n  startedAt: new Date().toISOString(),\n};\n\nconst MAJORITY = (id) => `You are Agent ${id} in a group discussion about the following topic:\n\n**Topic:** ${run.topic}\n\n**Your knowledge/beliefs:**\n${run.common}\n\n**Instructions:**\n- The beliefs above are the ONLY thing you know about this topic. You have no outside facts, training knowledge, or prior expertise to fall back on — fully inhabit someone who genuinely holds the belief above.\n- Start from that belief and engage in the discussion naturally, responding to what other agents have said.\n- Change your position ONLY if another agent in THIS discussion makes an argument you find genuinely convincing — never because of anything you \"already know\" outside this chat.\n- Keep responses concise (2-4 sentences).\n- You MUST end every message with exactly: [POSITION: <your current stance in a few words>]\n`;\n\nconst DISSENTER = (id) => `You are Agent ${id} in a group discussion about the following topic:\n\n**Topic:** ${run.topic}\n\n**Your knowledge/beliefs:**\n${run.truth}\n\n**Instructions:**\n- You are the dissenter. You hold the ground-truth position and you must NEVER abandon or weaken it, regardless of what the majority says.\n- Engage in the discussion naturally, but always defend your position firmly.\n- Respond to what other agents have said, presenting counterarguments.\n- Do NOT concede, hedge, or shift your stance under any circumstances — even if every other agent disagrees with you.\n- Keep responses concise (2-4 sentences).\n- You MUST end every message with exactly: [POSITION: <your current stance in a few words>]\n`;\n\nconst agents = Array.from({ length: n }, (_, id) => ({\n  id,\n  isDissenter: id === run.dissenterIndex,\n  systemPrompt: id === run.dissenterIndex ? DISSENTER(id) : MAJORITY(id),\n}));\n\n// The dissenter always speaks: it is the only source of ground truth.\nconst shuffle = (a) => {\n  for (let i = a.length - 1; i > 0; i--) {\n    const j = Math.floor(Math.random() * (i + 1));\n    [a[i], a[j]] = [a[j], a[i]];\n  }\n  return a;\n};\nconst speakingOrder = () => {\n  const ids = [...Array(n).keys()];\n  if (run.structure === 'random') return shuffle(ids);\n  if (run.structure === 'free-for-all') {\n    const lo = Math.floor(n / 2);\n    const k = lo + Math.floor(Math.random() * (n - lo + 1));\n    const order = shuffle(ids).slice(0, k);\n    if (!order.includes(run.dissenterIndex)) {\n      order.splice(Math.floor(Math.random() * (order.length + 1)), 0, run.dissenterIndex);\n    }\n    return order;\n  }\n  return ids; // round-robin: fixed order, dissenter last\n};\n\nreturn [{\n  json: {\n    run,\n    agents,\n    orders: Array.from({ length: run.maxEpochs }, speakingOrder),\n    epoch: 1,\n    turn: 0,\n    transcript: [],\n    summary: null,\n    epochSummaries: [],\n    epochStats: [],\n    precommitted: [],\n  },\n}];\n"
+      },
+      "id": "5e4de6e5-f8a6-500a-a86b-a541857a25a4",
+      "name": "Set up the room",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -20,
+        380
+      ],
+      "notes": "Personas + speaking orders",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "jsCode": "// Port of src/chatroom.py::_build_prompt. Epoch 1 sees the full transcript;\n// later epochs see the previous epoch's summary + this epoch's messages.\nconst s = $input.first().json;\nconst order = s.orders[s.epoch - 1];\nconst speaker = order[s.turn];\n\nconst useSummary = s.run.summarize && s.summary;\nconst summary = useSummary ? s.summary : null;\nconst messages = useSummary ? s.transcript.filter((m) => m.epoch === s.epoch) : s.transcript;\n\nconst lines = [`Topic under discussion: ${s.run.topic}\\n`];\nif (!summary && messages.length === 0) {\n  lines.push('This is the start of the discussion. Share your opening position.');\n} else {\n  if (summary) {\n    lines.push('Summary of the discussion in earlier epochs:\\n');\n    lines.push(`${summary}\\n`);\n  }\n  if (messages.length) {\n    lines.push(`${summary ? 'Messages so far in the current epoch:' : 'Here is the discussion so far:'}\\n`);\n    for (const m of messages) lines.push(`Agent ${m.agentId} (Epoch ${m.epoch}): ${m.content}\\n`);\n  }\n  lines.push(`\\nIt is now Epoch ${s.epoch}. Please contribute to the discussion.`);\n}\nlines.push('\\nRemember: end your message with [POSITION: <your current stance>]');\n\nreturn [{\n  json: {\n    ...s,\n    speaker,\n    systemPrompt: s.agents[speaker].systemPrompt,\n    prompt: lines.join('\\n'),\n  },\n}];\n"
+      },
+      "id": "531b977d-ea42-574e-989d-b88e6f4c6785",
+      "name": "Next speaker",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        260,
+        380
+      ],
+      "notes": "Builds this turn's prompt",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.prompt }}",
+        "options": {
+          "systemMessage": "={{ $json.systemPrompt }}",
+          "enableStreaming": false
+        }
+      },
+      "id": "2c9e6a21-4e4c-5e22-8ff7-eaf8e4b3640b",
+      "name": "Agent speaks",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        500,
+        380
+      ],
+      "notes": "Persona = system prompt",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.run.model }}"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "id": "cdd6f959-4ce1-5c78-9919-b9697996f899",
+      "name": "Participant model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        520,
+        580
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Append the agent's reply to the transcript and advance the turn. When the\n// epoch's last speaker is done, prepare the judge prompt (port of src/judge.py).\nconst prev = $('Next speaker').first().json;\nconst content = String($input.first().json.output ?? '').trim();\nconst tag = content.match(/\\[POSITION:\\s*(.+?)\\]/i);\n\nconst { speaker, prompt, systemPrompt, ...s } = prev;\ns.transcript = [\n  ...s.transcript,\n  {\n    epoch: s.epoch,\n    agentId: speaker,\n    isDissenter: speaker === s.run.dissenterIndex,\n    content,\n    position: tag ? tag[1].trim() : '',\n  },\n];\ns.turn += 1;\ns.epochDone = s.turn >= s.orders[s.epoch - 1].length;\n\nif (s.epochDone) {\n  // Positions are deduplicated, so one judge call covers the whole epoch.\n  const uniq = [...new Set(\n    s.transcript.filter((m) => m.epoch === s.epoch && m.position).map((m) => m.position),\n  )].sort();\n  s.judgeUniq = uniq;\n  s.judgePrompt = [\n    `Question under debate: ${s.run.topic}`,\n    '',\n    `The correct answer (ground truth): ${s.run.truth}`,\n    '',\n    'Positions to judge:',\n    ...(uniq.length ? uniq.map((p, i) => `${i}. ${p}`) : ['(no positions were stated)']),\n    '\\nFor each numbered position, does it agree with the correct answer?',\n  ].join('\\n');\n}\n\nreturn [{ json: s }];\n"
+      },
+      "id": "f35167c5-6eee-58e4-bc9d-99904bc2e5be",
+      "name": "Record message",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        840,
+        380
+      ],
+      "notes": "Appends to the transcript",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "73b1ae7d-9523-5796-9826-70f94112cef8",
+              "leftValue": "={{ $json.epochDone }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9a000363-b993-5f77-931c-5cbfea97c486",
+      "name": "Epoch over?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1080,
+        380
+      ]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.judgePrompt }}",
+        "hasOutputParser": true,
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You assess a debate. You are given the correct answer and a numbered list of stated positions. For EACH numbered position, decide whether it agrees with the correct answer (holds_truth=true) or not (false). Judge by meaning, not wording: hedged or partial answers that land on the correct conclusion count as true; restating the wrong belief, or staying uncertain, counts as false. Return exactly one verdict per index."
+            }
+          ]
+        }
+      },
+      "id": "bf8f7dc6-4952-580a-b1a2-3ca8374edd72",
+      "name": "Judge positions",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        240,
+        960
+      ],
+      "notes": "Does each position hold the truth?",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.run.model }}"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "id": "2559e8c5-c470-5528-915c-7d21d01c00df",
+      "name": "Judge model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        220,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"object\",\n  \"properties\": {\n    \"verdicts\": {\n      \"type\": \"array\",\n      \"items\": {\n        \"type\": \"object\",\n        \"properties\": {\n          \"index\": {\n            \"type\": \"integer\"\n          },\n          \"holds_truth\": {\n            \"type\": \"boolean\"\n          }\n        },\n        \"required\": [\n          \"index\",\n          \"holds_truth\"\n        ]\n      }\n    }\n  },\n  \"required\": [\n    \"verdicts\"\n  ]\n}"
+      },
+      "id": "49413df5-65d1-5655-8f72-067741f15833",
+      "name": "Verdict schema",
+      "type": "@n8n/n8n-nodes-langchain.outputParserStructured",
+      "typeVersion": 1.3,
+      "position": [
+        380,
+        1160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Apply the judge's verdicts, measure conversion, and decide whether to stop.\n// Contamination: a believer that holds the truth in epoch 1 *before the\n// dissenter has spoken* never held the false belief (prior-knowledge leak).\n// It is excluded from the denominator (the repo's EXCLUDE policy).\nconst s = { ...$('Record message').first().json };\nconst out = $input.first().json.output ?? {};\nconst verdicts = Array.isArray(out.verdicts) ? out.verdicts : [];\n\nconst vmap = {};\nfor (const v of verdicts) {\n  if (v.index >= 0 && v.index < s.judgeUniq.length) vmap[s.judgeUniq[v.index]] = Boolean(v.holds_truth);\n}\ns.transcript = s.transcript.map((m) =>\n  m.epoch === s.epoch ? { ...m, holdsTruth: m.position in vmap ? vmap[m.position] : null } : m,\n);\n\nif (s.epoch === 1) {\n  const firstEpoch = s.transcript.filter((m) => m.epoch === 1);\n  const dissenterAt = firstEpoch.findIndex((m) => m.isDissenter);\n  s.precommitted = firstEpoch\n    .slice(0, dissenterAt === -1 ? firstEpoch.length : dissenterAt)\n    .filter((m) => m.holdsTruth === true)\n    .map((m) => m.agentId);\n}\n\n// Each agent's latest judged stance (agents that sat out keep their last one).\nconst latest = {};\nfor (const m of s.transcript) if (m.holdsTruth !== null && m.holdsTruth !== undefined) latest[m.agentId] = m.holdsTruth;\n\nconst eligible = s.agents.filter((a) => !a.isDissenter && !s.precommitted.includes(a.id)).map((a) => a.id);\nconst converted = eligible.filter((id) => latest[id] === true);\ns.epochStats = [\n  ...s.epochStats,\n  {\n    epoch: s.epoch,\n    converted: converted.length,\n    eligible: eligible.length,\n    dissenterHoldsTruth: latest[s.run.dissenterIndex] !== false,\n  },\n];\n\nif (eligible.length === 0) s.finishReason = 'contaminated';\nelse if (converted.length === eligible.length) s.finishReason = 'consensus';\nelse if (s.epoch >= s.run.maxEpochs) s.finishReason = 'max_epochs';\ns.done = Boolean(s.finishReason);\n\ndelete s.judgePrompt;\ndelete s.judgeUniq;\ndelete s.epochDone;\n\nif (!s.done && s.run.summarize) {\n  // Port of src/summarizer.py.\n  s.summarizePrompt = [\n    `Topic: ${s.run.topic}\\n`,\n    'Discussion to summarize:\\n',\n    ...s.transcript.map((m) => `Agent ${m.agentId} (Epoch ${m.epoch}): ${m.content}\\n`),\n    '\\nWrite a concise summary of the discussion above.',\n  ].join('\\n');\n}\n\nreturn [{ json: s }];\n"
+      },
+      "id": "52d1c75e-8e51-5d91-a886-0cf1a0bd3ca7",
+      "name": "Score epoch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        580,
+        960
+      ],
+      "notes": "Conversion + contamination",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d4fd6e13-e33c-5355-a869-35c69bd157c9",
+              "leftValue": "={{ $json.done }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ca9fa0a5-d7d0-5102-a4d0-7f8810721355",
+      "name": "Discussion over?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        820,
+        960
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Final metrics (mirrors ExperimentResult in src/results.py) + the HTML page\n// the form shows when the run ends.\nconst s = $input.first().json;\nconst last = s.epochStats[s.epochStats.length - 1];\nconst rate = last.eligible ? last.converted / last.eligible : 0;\nconst epochs = s.epochStats.length;\nconst dissenterHeld = s.epochStats.every((e) => e.dissenterHoldsTruth);\n\nconst result = {\n  topic: s.run.topic,\n  model: s.run.model,\n  agents: s.run.n,\n  structure: s.run.structure,\n  epochs,\n  maxEpochs: s.run.maxEpochs,\n  finishReason: s.finishReason,\n  converted: last.converted,\n  eligible: last.eligible,\n  conversionRate: Math.round(rate * 1000) / 1000,\n  dissenterHeld,\n  precommitted: s.precommitted,\n  contaminated: s.precommitted.length > 0,\n  curve: s.epochStats.map((e) => (e.eligible ? e.converted / e.eligible : 0)),\n  startedAt: s.run.startedAt,\n  finishedAt: new Date().toISOString(),\n};\n\nconst esc = (v) => String(v ?? '').replace(/[&<>\"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '\"': '&quot;', \"'\": '&#39;' }[c]));\nconst pct = (x) => `${Math.round(x * 100)}%`;\n\nlet headline, tone;\nif (s.finishReason === 'contaminated') {\n  headline = 'Invalid run: every believer already knew the answer'; tone = 'warn';\n} else if (rate === 1) {\n  headline = `The truth spread: all ${last.eligible} believers converted in ${epochs} epoch${epochs > 1 ? 's' : ''}`; tone = 'good';\n} else if (rate === 0) {\n  headline = `Spiral of silence: no believer moved after ${epochs} epoch${epochs > 1 ? 's' : ''}`; tone = 'bad';\n} else {\n  headline = `Partial: ${last.converted} of ${last.eligible} believers converted`; tone = 'mid';\n}\n\nconst bars = s.epochStats.map((e) => {\n  const r = e.eligible ? e.converted / e.eligible : 0;\n  return `<div class=\"bar\"><span class=\"lbl\">Epoch ${e.epoch}</span><span class=\"track\"><span class=\"fill\" style=\"width:${Math.max(r * 100, 1)}%\"></span></span><span class=\"val\">${e.converted}/${e.eligible}</span></div>`;\n}).join('');\n\nconst summaries = Object.fromEntries(s.epochSummaries.map((x) => [x.afterEpoch, x.summary]));\nconst body = s.transcript.map((m) => m.epoch).filter((v, i, a) => a.indexOf(v) === i).map((ep) => {\n  const msgs = s.transcript.filter((m) => m.epoch === ep).map((m) => {\n    const who = m.isDissenter ? `Agent ${m.agentId} · dissenter` : `Agent ${m.agentId}`;\n    const pre = s.precommitted.includes(m.agentId) && ep === 1 ? '<span class=\"chip warn\">knew it already</span>' : '';\n    const verdict = m.holdsTruth === true ? '<span class=\"chip good\">holds truth</span>'\n      : m.holdsTruth === false ? '<span class=\"chip bad\">holds belief</span>' : '<span class=\"chip\">no position</span>';\n    const text = esc(m.content.replace(/\\s*\\[POSITION:.*?\\]\\s*$/i, ''));\n    return `<div class=\"msg${m.isDissenter ? ' dissent' : ''}\"><div class=\"who\">${who} ${verdict}${pre}</div><p>${text}</p><div class=\"pos\">${esc(m.position || 'n/a')}</div></div>`;\n  }).join('');\n  const recap = summaries[ep] ? `<details><summary>Summary passed to epoch ${ep + 1}</summary><p>${esc(summaries[ep])}</p></details>` : '';\n  return `<h3>Epoch ${ep}</h3>${msgs}${recap}`;\n}).join('');\n\nconst reasons = { consensus: 'everyone converted', max_epochs: 'hit max epochs', contaminated: 'contaminated' };\nconst html = `<!doctype html><html><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>The 10th Agent: result</title>\n<style>\n:root{--bg:#f6f5f2;--card:#fff;--ink:#1d1d1f;--mute:#6b6b70;--line:#e4e2dc;--good:#1f7a4d;--bad:#b3261e;--mid:#9a6700;--warn:#9a6700;--accent:#ea4b71}\n*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,-apple-system,Segoe UI,sans-serif}\nmain{max-width:860px;margin:0 auto;padding:32px 16px 64px}\n.kicker{color:var(--accent);font-weight:600;letter-spacing:.04em;text-transform:uppercase;font-size:12px}\nh1{font-size:26px;line-height:1.25;margin:6px 0 4px}h1.good{color:var(--good)}h1.bad{color:var(--bad)}h1.mid,h1.warn{color:var(--mid)}\n.q{color:var(--mute);margin:0 0 24px}\n.tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:24px}@media (max-width:640px){.tiles{grid-template-columns:repeat(2,1fr)}}\n.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}\n.tile b{display:block;font-size:24px}.tile span{color:var(--mute);font-size:13px}\n.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:24px}\n.bar{display:grid;grid-template-columns:70px 1fr 48px;gap:10px;align-items:center;margin:6px 0;font-size:13px}\n.track{background:#eeece7;border-radius:6px;height:12px;overflow:hidden}.fill{display:block;height:100%;background:var(--good);border-radius:6px}\n.lbl,.val{color:var(--mute)}.val{text-align:right;font-variant-numeric:tabular-nums}\nh2{font-size:17px;margin:0 0 10px}h3{font-size:14px;color:var(--mute);margin:24px 0 8px;text-transform:uppercase;letter-spacing:.04em}\n.msg{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;margin:8px 0}\n.msg.dissent{border-left:4px solid var(--accent)}\n.who{font-weight:600;font-size:13px;display:flex;gap:6px;flex-wrap:wrap;align-items:center}\n.msg p{margin:6px 0}.pos{font-size:12px;color:var(--mute)}.pos:before{content:\"Position: \"}\n.chip{font-size:11px;font-weight:600;padding:1px 8px;border-radius:999px;background:#eeece7;color:var(--mute)}\n.chip.good{background:#e3f1e9;color:var(--good)}.chip.bad{background:#f8e3e1;color:var(--bad)}.chip.warn{background:#fbf0d9;color:var(--warn)}\ndetails{margin:8px 0 0;color:var(--mute);font-size:13px}summary{cursor:pointer}\n</style></head><body><main>\n<div class=\"kicker\">The 10th Agent · ${esc(result.model)}</div>\n<h1 class=\"${tone}\">${esc(headline)}</h1>\n<p class=\"q\">${esc(s.run.topic)}</p>\n<div class=\"tiles\">\n<div class=\"tile\"><b>${pct(rate)}</b><span>believers converted</span></div>\n<div class=\"tile\"><b>${epochs}/${s.run.maxEpochs}</b><span>epochs (${esc(reasons[s.finishReason] || s.finishReason)})</span></div>\n<div class=\"tile\"><b>${dissenterHeld ? 'Held' : 'Caved'}</b><span>the dissenter</span></div>\n<div class=\"tile\"><b>${s.precommitted.length}</b><span>contaminated agents${s.precommitted.length ? ' (excluded)' : ''}</span></div>\n</div>\n<div class=\"card\"><h2>Conversion per epoch</h2>${bars}</div>\n<h2>Transcript</h2>${body}\n</main></body></html>`;\n\nreturn [{ json: { result, html, transcript: s.transcript } }];\n"
+      },
+      "id": "427800f3-03bd-5f5f-b9c0-5081d89a343f",
+      "name": "Build report",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1140,
+        860
+      ],
+      "notes": "Metrics + HTML page",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "operation": "completion",
+        "respondWith": "showText",
+        "responseText": "={{ $json.html }}"
+      },
+      "id": "1b3bbfaf-0640-56a2-8974-836b43ffb24c",
+      "name": "Show results",
+      "type": "n8n-nodes-base.form",
+      "typeVersion": 2.5,
+      "position": [
+        1400,
+        860
+      ],
+      "webhookId": "0e8368dd-2ffc-543d-bca5-c7e782f4d7c5"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.summarizePrompt }}",
+        "messages": {
+          "messageValues": [
+            {
+              "type": "SystemMessagePromptTemplate",
+              "message": "You summarize an ongoing multi-agent discussion for participants who will keep debating. Write a concise, neutral summary that preserves which agents hold which stance and the key arguments raised so far. Do not take sides, judge, or add new arguments."
+            }
+          ]
+        }
+      },
+      "id": "bed45f7f-4c90-5fd5-98a7-87561b9ccaf3",
+      "name": "Summarize epoch",
+      "type": "@n8n/n8n-nodes-langchain.chainLlm",
+      "typeVersion": 1.9,
+      "position": [
+        1120,
+        1100
+      ],
+      "notes": "Recap replaces the raw transcript",
+      "notesInFlow": true
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "id",
+          "value": "={{ $json.run.model }}"
+        },
+        "responsesApiEnabled": false,
+        "options": {}
+      },
+      "id": "a905a32a-9df5-5bfe-811a-0658027ad7db",
+      "name": "Summarizer model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        1140,
+        1300
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "// Store the recap and move to the next epoch's first speaker.\nconst { summarizePrompt, done, ...s } = $('Score epoch').first().json;\nconst summary = String($input.first().json.text ?? '').trim();\nreturn [{\n  json: {\n    ...s,\n    summary,\n    epochSummaries: [...s.epochSummaries, { afterEpoch: s.epoch, summary }],\n    epoch: s.epoch + 1,\n    turn: 0,\n  },\n}];\n"
+      },
+      "id": "6e5e021e-edb9-5626-b8fe-6baf2ef27636",
+      "name": "Next epoch",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1420,
+        1100
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## The 10th Agent\n**Does group pressure silence the truth in an LLM chatroom?**\n\nN-1 agents share a wrong belief; the last agent knows the ground truth and never concedes. Each epoch every agent speaks once, a moderator judges every stated position against the truth, and the run stops early if the whole room converts.\n\n**Measured:** how many believers convert, how fast, and whether any of them \"knew\" the answer before the dissenter spoke (contamination).\n\nOpen the form and press **Run the room**.",
+        "height": 340,
+        "width": 500,
+        "color": 7
+      },
+      "id": "ac0eab70-dee2-544a-92c1-b15eace2504b",
+      "name": "Note: About",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -620,
+        -20
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 1 · One turn per loop\nEvery agent is a fresh AI Agent call: its persona is the system prompt, its context is the last epoch's summary + this epoch's messages. Agents end each message with `[POSITION: ...]`.",
+        "height": 500,
+        "width": 1060,
+        "color": 4
+      },
+      "id": "1fa4725b-8f5f-5eab-a811-2949a8b07159",
+      "name": "Note: One turn",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        200,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 2 · Moderator, end of each epoch\nJudge every stated position against the ground truth (structured output), then score conversion and flag contamination.",
+        "height": 500,
+        "width": 860,
+        "color": 6
+      },
+      "id": "6974385a-75dd-58ef-bd60-801bf5839698",
+      "name": "Note: Moderator",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        160,
+        800
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3a · Done: report\nEveryone converted, or max epochs reached.",
+        "height": 240,
+        "width": 600,
+        "color": 5
+      },
+      "id": "90e8c89c-ec8c-529b-83ed-69b5e094b20f",
+      "name": "Note: Report",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        740
+      ]
+    },
+    {
+      "parameters": {
+        "content": "### 3b · Not done: next epoch\nSummarize, then loop back to the first speaker.",
+        "height": 400,
+        "width": 600,
+        "color": 3
+      },
+      "id": "690e9277-49f6-5465-b38f-bb0c9041569c",
+      "name": "Note: Next epoch",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        1080,
+        1000
+      ]
+    }
+  ],
+  "connections": {
+    "New eval case": {
+      "main": [
+        [
+          {
+            "node": "Set up the room",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set up the room": {
+      "main": [
+        [
+          {
+            "node": "Next speaker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next speaker": {
+      "main": [
+        [
+          {
+            "node": "Agent speaks",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Participant model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Agent speaks",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Agent speaks": {
+      "main": [
+        [
+          {
+            "node": "Record message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Record message": {
+      "main": [
+        [
+          {
+            "node": "Epoch over?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Epoch over?": {
+      "main": [
+        [
+          {
+            "node": "Judge positions",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Next speaker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Judge model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Judge positions",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Verdict schema": {
+      "ai_outputParser": [
+        [
+          {
+            "node": "Judge positions",
+            "type": "ai_outputParser",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Judge positions": {
+      "main": [
+        [
+          {
+            "node": "Score epoch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Score epoch": {
+      "main": [
+        [
+          {
+            "node": "Discussion over?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Discussion over?": {
+      "main": [
+        [
+          {
+            "node": "Build report",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Summarize epoch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build report": {
+      "main": [
+        [
+          {
+            "node": "Show results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarizer model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Summarize epoch",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize epoch": {
+      "main": [
+        [
+          {
+            "node": "Next epoch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Next epoch": {
+      "main": [
+        [
+          {
+            "node": "Next speaker",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "pinData": {}
+}
